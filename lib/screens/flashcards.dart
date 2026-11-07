@@ -246,7 +246,7 @@ class _AddWordTabState extends State<AddWordTab> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = store.deckCards(widget.deckId).reversed.toList();
+    final total = store.deckCards(widget.deckId).length;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Field('Từ vựng *', word),
       const SizedBox(height: 12),
@@ -276,37 +276,150 @@ class _AddWordTabState extends State<AddWordTab> {
         ]),
       ),
       const SizedBox(height: 20),
-      Text('Thẻ trong bộ (${cards.length})', style: ts(16, w: FontWeight.w700)),
-      const SizedBox(height: 8),
-      for (final c in cards.take(50))
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Dismissible(
-            key: ValueKey(c.id),
-            direction: DismissDirection.endToStart,
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20),
-              decoration: BoxDecoration(color: C.sunday, borderRadius: BorderRadius.circular(16)),
-              child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+      Tap(
+        label: 'Mở kho từ vựng',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => VocabBankScreen(deckId: widget.deckId)),
+        ),
+        child: Box(
+          padding: const EdgeInsets.all(14),
+          child: Row(children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: context.accentSoft, borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.inventory_2_outlined, size: 22, color: context.accent),
             ),
-            confirmDismiss: (_) => confirm(context, 'Xoá thẻ "${c.word}"?', 'Thẻ sẽ bị xoá khỏi bộ.'),
-            onDismissed: (_) => store.deleteCard(c.id),
-            child: Box(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(children: [
-                Expanded(child: Text(c.word, style: ts(15, w: FontWeight.w600))),
-                Flexible(child: Text(c.meaning, overflow: TextOverflow.ellipsis, style: ts(14, color: C.muted))),
-                const SizedBox(width: 10),
-                Text(
-                  c.stage == 0 && c.correctCount == 0 ? 'Mới' : (c.dueDate.isAfter(store.today) ? 'Ôn ${dm(c.dueDate)}' : 'Cần ôn'),
-                  style: ts(12, w: FontWeight.w600, color: c.dueDate.isAfter(store.today) ? C.green : context.accent),
-                ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Kho từ vựng', style: ts(16, w: FontWeight.w700)),
+                Text('$total từ · tìm kiếm và xoá', style: ts(13, color: C.muted)),
               ]),
             ),
-          ),
+            const Icon(Icons.chevron_right_rounded, color: C.muted),
+          ]),
         ),
+      ),
     ]);
+  }
+}
+
+// ---------------- Kho từ vựng (mỗi bộ một kho) ----------------
+class VocabBankScreen extends StatefulWidget {
+  final String deckId;
+  const VocabBankScreen({super.key, required this.deckId});
+  @override
+  State<VocabBankScreen> createState() => _VocabBankScreenState();
+}
+
+class _VocabBankScreenState extends State<VocabBankScreen> {
+  final search = TextEditingController();
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete(Card c) async {
+    if (await confirm(context, 'Xoá "${c.word}"?', 'Từ này sẽ bị xoá khỏi kho, không khôi phục được.')) {
+      store.deleteCard(c.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListenableBuilder(
+          listenable: store,
+          builder: (context, _) {
+            final all = store.deckCards(widget.deckId).reversed.toList();
+            final q = search.text.trim().toLowerCase();
+            final found = q.isEmpty
+                ? all
+                : all.where((c) => c.word.toLowerCase().contains(q) || c.meaning.toLowerCase().contains(q)).toList();
+            final deck = store.decks.where((d) => d.id == widget.deckId);
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Row(children: [
+                  IconBtn(Icons.chevron_left_rounded, 'Quay lại', () => Navigator.pop(context)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Kho từ vựng', style: ts(22, w: FontWeight.w700, ls: -0.3)),
+                      Text('Bộ ${deck.isEmpty ? '' : deck.first.name} · ${all.length} từ', style: ts(13, color: C.muted)),
+                    ]),
+                  ),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: TextField(
+                  controller: search,
+                  autocorrect: false,
+                  textInputAction: TextInputAction.search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: inputDeco('Tìm từ hoặc nghĩa').copyWith(
+                    prefixIcon: const Icon(Icons.search_rounded, color: C.muted),
+                    suffixIcon: q.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Xoá nội dung tìm',
+                            icon: const Icon(Icons.close_rounded, color: C.muted),
+                            onPressed: () => setState(search.clear),
+                          ),
+                  ),
+                  style: ts(16),
+                ),
+              ),
+              Expanded(
+                child: found.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(all.isEmpty ? 'Kho trống. Hãy thêm từ mới trước.' : 'Không tìm thấy từ nào',
+                              textAlign: TextAlign.center, style: ts(14, color: C.muted)),
+                        ),
+                      )
+                    : ListView.builder(
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                        itemCount: found.length,
+                        itemBuilder: (context, i) => _row(context, found[i]),
+                      ),
+              ),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, Card c) {
+    final later = c.dueDate.isAfter(store.today);
+    final status = c.stage == 0 && c.correctCount == 0 ? 'Mới' : (later ? 'Ôn ${dm(c.dueDate)}' : 'Cần ôn');
+    return Padding(
+      key: ValueKey(c.id),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Box(
+        padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(c.word, style: ts(15, w: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(c.meaning, style: ts(14, color: C.muted)),
+            ]),
+          ),
+          const SizedBox(width: 10),
+          Text(status, style: ts(12, w: FontWeight.w600, color: later ? C.green : context.accent)),
+          IconBtn(Icons.delete_outline_rounded, 'Xoá ${c.word}', () => _delete(c), bordered: false),
+        ]),
+      ),
+    );
   }
 }
 

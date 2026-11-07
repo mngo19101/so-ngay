@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:so_ngay/logic.dart';
 import 'package:so_ngay/main.dart';
 import 'package:so_ngay/models.dart';
+import 'package:so_ngay/screens/flashcards.dart';
 import 'package:so_ngay/screens/shell.dart';
 import 'package:so_ngay/store.dart';
 
@@ -48,6 +49,33 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'màn $p');
     }
+  });
+
+  testWidgets('kho từ vựng: riêng từng bộ, tìm kiếm và xoá', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await store.load();
+    final a = store.addDeck('Kho A');
+    final b = store.addDeck('Kho B');
+    store.addCard(a.id, 'apple', 'quả táo');
+    store.addCard(a.id, 'book', 'quyển sách');
+    store.addCard(b.id, 'cat', 'con mèo');
+    await tester.pumpWidget(MaterialApp(home: VocabBankScreen(deckId: a.id)));
+    expect(find.text('apple'), findsOneWidget);
+    expect(find.text('book'), findsOneWidget);
+    expect(find.text('cat'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'SÁCH');
+    await tester.pump();
+    expect(find.text('apple'), findsNothing);
+    expect(find.text('book'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Xoá'));
+    await tester.pumpAndSettle();
+    expect(store.deckCards(a.id).map((c) => c.word), ['apple']);
+    expect(store.deckCards(b.id).map((c) => c.word), ['cat']);
+    expect(find.text('Không tìm thấy từ nào'), findsOneWidget);
   });
 
   testWidgets('lịch nhắc không phụ thuộc việc mở app', (tester) async {
