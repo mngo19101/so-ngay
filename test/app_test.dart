@@ -60,8 +60,16 @@ void main() {
     expect(store.streak(), 1);
     final card = store.cards.first;
     store.review(card, true);
+    expect(card.intervalDays, 1);
+    expect(card.stage, 1);
+    store.review(card, true); // ôn sớm: không đổi lịch
+    expect(card.stage, 1);
+    card.dueDate = store.today;
+    store.review(card, true);
     expect(card.intervalDays, 3);
+    expect(card.stage, 2);
     store.review(card, false);
     expect(card.intervalDays, 1);
+    expect(card.stage, 0);
   });
 }
