@@ -15,6 +15,10 @@ class Event {
   String? location;
   String category; // study | personal | habit | other
   List<int> remindBeforeMin;
+  String repeat; // none | daily | weekly
+  List<int> repeatWeekdays; // 1=T2..7=CN, chỉ dùng khi weekly
+  DateTime? repeatUntil; // ngày cuối của chuỗi (bao gồm), null = không kết thúc
+  List<String> skipDates; // các ngày đã xoá riêng lẻ khỏi chuỗi, dạng yyyy-MM-dd
   Event({
     required this.id,
     required this.title,
@@ -23,7 +27,12 @@ class Event {
     this.location,
     this.category = 'other',
     this.remindBeforeMin = const [],
+    this.repeat = 'none',
+    this.repeatWeekdays = const [],
+    this.repeatUntil,
+    this.skipDates = const [],
   });
+  bool get repeats => repeat != 'none';
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -32,6 +41,10 @@ class Event {
         'location': location,
         'category': category,
         'remindBeforeMin': remindBeforeMin,
+        'repeat': repeat,
+        'repeatWeekdays': repeatWeekdays,
+        'repeatUntil': repeatUntil == null ? null : isoDate(repeatUntil!),
+        'skipDates': skipDates,
       };
   factory Event.fromJson(Map<String, dynamic> j) => Event(
         id: j['id'],
@@ -41,6 +54,10 @@ class Event {
         location: j['location'],
         category: j['category'] ?? 'other',
         remindBeforeMin: (j['remindBeforeMin'] as List? ?? []).cast<int>(),
+        repeat: j['repeat'] ?? 'none',
+        repeatWeekdays: (j['repeatWeekdays'] as List? ?? []).cast<int>(),
+        repeatUntil: j['repeatUntil'] == null ? null : parseDate(j['repeatUntil']),
+        skipDates: (j['skipDates'] as List? ?? []).cast<String>(),
       );
 }
 
@@ -213,6 +230,8 @@ class Settings {
   bool pushEnabled, sound, sidebarCollapsed, studyReminder;
   bool morningEnabled;
   String morningTime;
+  String studyReminderTime;
+  String themeMode; // system | light | dark
   int dailyGoalMin, weeklyGoalMin;
   Settings({
     this.displayName = 'bạn',
@@ -223,6 +242,8 @@ class Settings {
     this.studyReminder = true,
     this.morningEnabled = true,
     this.morningTime = '07:00',
+    this.studyReminderTime = '20:00',
+    this.themeMode = 'system',
     this.dailyGoalMin = 180,
     this.weeklyGoalMin = 1200,
   });
@@ -235,6 +256,8 @@ class Settings {
         'studyReminder': studyReminder,
         'morningEnabled': morningEnabled,
         'morningTime': morningTime,
+        'studyReminderTime': studyReminderTime,
+        'themeMode': themeMode,
         'dailyGoalMin': dailyGoalMin,
         'weeklyGoalMin': weeklyGoalMin,
       };
@@ -249,6 +272,8 @@ class Settings {
       studyReminder: j['studyReminder'] ?? d.studyReminder,
       morningEnabled: j['morningEnabled'] ?? d.morningEnabled,
       morningTime: j['morningTime'] ?? d.morningTime,
+      studyReminderTime: j['studyReminderTime'] ?? d.studyReminderTime,
+      themeMode: j['themeMode'] ?? d.themeMode,
       dailyGoalMin: j['dailyGoalMin'] ?? d.dailyGoalMin,
       weeklyGoalMin: j['weeklyGoalMin'] ?? d.weeklyGoalMin,
     );

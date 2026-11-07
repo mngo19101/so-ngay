@@ -8,7 +8,6 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
   await NotificationService.instance.init();
   await store.load();
   runApp(const SoNgayApp());
@@ -17,8 +16,62 @@ Future<void> main() async {
   store.rescheduleNotifications();
 }
 
-class SoNgayApp extends StatelessWidget {
+class SoNgayApp extends StatefulWidget {
   const SoNgayApp({super.key});
+  @override
+  State<SoNgayApp> createState() => _SoNgayAppState();
+}
+
+class _SoNgayAppState extends State<SoNgayApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    store.addListener(_syncTheme);
+    C.dark = _wantDark();
+    _applyStatusBar();
+  }
+
+  @override
+  void dispose() {
+    store.removeListener(_syncTheme);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  bool _wantDark() => switch (store.settings.themeMode) {
+        'dark' => true,
+        'light' => false,
+        _ => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
+      };
+
+  void _applyStatusBar() =>
+      SystemChrome.setSystemUIOverlayStyle(C.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark);
+
+  /// Màu đọc từ C.xxx lúc build và nhiều widget là const, nên phải dựng lại cả
+  /// cây. Giữ nguyên trạng thái (form đang nhập, bảng đang mở), vì iOS có thể
+  /// đổi sáng/tối thoáng qua mỗi khi app xuống nền.
+  void _syncTheme() {
+    final want = _wantDark();
+    if (want == C.dark) return;
+    C.dark = want;
+    _applyStatusBar();
+    void rebuild(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(rebuild);
+    }
+
+    (context as Element).visitChildren(rebuild);
+  }
+
+  @override
+  void didChangePlatformBrightness() => _syncTheme();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.resumed) store.flushStudyPlan();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(

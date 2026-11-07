@@ -36,7 +36,7 @@ class NotificationsScreen extends StatelessWidget {
           const ScreenHeader('Thông báo'),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(22)),
+            decoration: BoxDecoration(color: C.fill, borderRadius: BorderRadius.circular(22)),
             child: Column(children: [
               Container(
                 padding: const EdgeInsets.all(14),
@@ -65,24 +65,15 @@ class NotificationsScreen extends StatelessWidget {
                 if (v) await NotificationService.instance.requestPermission();
                 store.updateSettings((x) => x.pushEnabled = v, reschedule: true);
               }),
-              const Divider(height: 1, color: C.border),
+              Divider(height: 1, color: C.border),
               _sw('Nhắc mỗi sáng', 'Lúc ${s.morningTime} · nhắc xem việc hôm nay', s.morningEnabled,
                   (v) => store.updateSettings((x) => x.morningEnabled = v, reschedule: true),
-                  trailing: Tap(
-                    onTap: () async {
-                      final p = s.morningTime.split(':');
-                      final t = await showTimePicker(context: context, initialTime: TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1])));
-                      if (t != null) {
-                        store.updateSettings((x) => x.morningTime = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}', reschedule: true);
-                      }
-                    },
-                    label: 'Đổi giờ tóm tắt',
-                    child: const Padding(padding: EdgeInsets.all(10), child: Icon(Icons.schedule_rounded, size: 20, color: C.muted)),
-                  )),
-              const Divider(height: 1, color: C.border),
-              _sw('Nhắc ôn từ vựng', 'Mỗi tối 20:00', s.studyReminder,
-                  (v) => store.updateSettings((x) => x.studyReminder = v, reschedule: true)),
-              const Divider(height: 1, color: C.border),
+                  trailing: _timeBtn(context, 'Đổi giờ tóm tắt', s.morningTime, (v) => store.updateSettings((x) => x.morningTime = v, reschedule: true))),
+              Divider(height: 1, color: C.border),
+              _sw('Nhắc ôn từ vựng', 'Lúc ${s.studyReminderTime} · báo số từ cần ôn', s.studyReminder,
+                  (v) => store.updateSettings((x) => x.studyReminder = v, reschedule: true),
+                  trailing: _timeBtn(context, 'Đổi giờ nhắc ôn', s.studyReminderTime, (v) => store.updateSettings((x) => x.studyReminderTime = v, reschedule: true))),
+              Divider(height: 1, color: C.border),
               _sw('Âm thanh', 'Phát tiếng khi có thông báo', s.sound, (v) => store.updateSettings((x) => x.sound = v, reschedule: true)),
             ]),
           ),
@@ -153,6 +144,16 @@ class NotificationsScreen extends StatelessWidget {
             ]),
           ),
         ),
+      );
+
+  Widget _timeBtn(BuildContext context, String label, String current, ValueChanged<String> onPicked) => Tap(
+        label: label,
+        onTap: () async {
+          final p = current.split(':');
+          final t = await showTimePicker(context: context, initialTime: TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1])));
+          if (t != null) onPicked('${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
+        },
+        child: Padding(padding: const EdgeInsets.all(10), child: Icon(Icons.schedule_rounded, size: 20, color: C.muted)),
       );
 
   Widget _sw(String title, String sub, bool v, ValueChanged<bool> on, {Widget? trailing}) => Padding(

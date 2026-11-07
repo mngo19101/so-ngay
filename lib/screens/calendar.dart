@@ -147,7 +147,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               )
             else if (dayEvents.isNotEmpty)
-              Box(child: Column(children: [for (final e in dayEvents) EventRow(e)])),
+              Box(child: Column(children: [for (final e in dayEvents) EventRow(e, on: sel)])),
           ]),
         );
       },
@@ -177,7 +177,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             height: 56,
             margin: const EdgeInsets.all(1.5),
             decoration: BoxDecoration(
-              color: isSel ? C.ink : Colors.transparent,
+              color: isSel ? C.fill : Colors.transparent,
               borderRadius: BorderRadius.circular(14),
               border: isToday && !isSel ? Border.all(color: context.accent, width: 1.5) : null,
             ),
@@ -241,7 +241,7 @@ class _MonthPickerState extends State<_MonthPicker> {
                   child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: (year == widget.initial.year && m == widget.initial.month) ? C.ink : Colors.transparent,
+                      color: (year == widget.initial.year && m == widget.initial.month) ? C.fill : Colors.transparent,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: (year == widget.today.year && m == widget.today.month) ? context.accent : C.borderInput,

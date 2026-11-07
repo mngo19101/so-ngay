@@ -196,9 +196,7 @@ class AppStore extends ChangeNotifier {
       repeating.add(Planned('morning', nextDaily(settings.morningTime), 'Tóm tắt buổi sáng',
           'Xem việc hôm nay và những ngày sắp tới', repeat: 'daily'));
     }
-    if (settings.studyReminder && cards.isNotEmpty) {
-      repeating.add(Planned('study', nextDaily('20:00'), 'Ôn từ vựng', 'Đến giờ ôn từ vựng rồi', repeat: 'daily'));
-    }
+    final study = settings.studyReminder ? _studyPlan(now, t) : <Planned>[];
 
     for (final sd in specialDays.where((s) => s.enabled)) {
       for (final off in sd.remindOffsetsDays) {
@@ -236,11 +234,33 @@ class AppStore extends ChangeNotifier {
       }
     }
     for (final e in events) {
+      final body =
+          '${e.start.hour.toString().padLeft(2, '0')}:${e.start.minute.toString().padLeft(2, '0')}${e.location != null && e.location!.isNotEmpty ? ' · ${e.location}' : ''}';
+      final title = 'Sắp tới: ${e.title}';
       for (final m in e.remindBeforeMin) {
-        final when = e.start.subtract(Duration(minutes: m));
-        if (when.isAfter(now)) {
-          once.add(Planned('ev_${e.id}_$m', when, 'Sắp tới: ${e.title}',
-              '${e.start.hour.toString().padLeft(2, '0')}:${e.start.minute.toString().padLeft(2, '0')}${e.location != null && e.location!.isNotEmpty ? ' · ${e.location}' : ''}'));
+        final key = 'ev_${e.id}_$m';
+        DateTime whenOn(DateTime d) =>
+            DateTime(d.year, d.month, d.day, e.start.hour, e.start.minute).subtract(Duration(minutes: m));
+        if (!e.repeats) {
+          final when = whenOn(e.start);
+          if (when.isAfter(now)) once.add(Planned(key, when, title, body));
+        } else if (_canRepeatEvent(e, t)) {
+          // iOS tự lặp nên vẫn nhắc dù lâu không mở app.
+          final from = addDays(t, -1); // nhắc trước có thể rơi vào hôm trước
+          for (final wd in e.repeat == 'daily' ? const [0] : _eventWeekdays(e)) {
+            for (final d in eventOccurrencesFrom(e, from, 15)) {
+              if ((wd == 0 || d.weekday == wd) && whenOn(d).isAfter(now)) {
+                repeating.add(Planned(wd == 0 ? '${key}_d' : '${key}_w$wd', whenOn(d), title, body,
+                    repeat: wd == 0 ? 'daily' : 'weekly'));
+                break;
+              }
+            }
+          }
+        } else {
+          for (final d in eventOccurrencesFrom(e, addDays(t, -1), 20)) {
+            final when = whenOn(d);
+            if (when.isAfter(now)) once.add(Planned('${key}_${isoDate(d)}', when, title, body));
+          }
         }
       }
     }
@@ -250,10 +270,46 @@ class AppStore extends ChangeNotifier {
     once.sort(byWhen);
     final keep = repeating.take(_maxRepeating).toList();
     final room = _maxPending - keep.length;
+    // 14 ngày ôn gần nhất luôn có chỗ; các lần xa hơn chỉ dùng phần còn thừa.
+    final studyFloor = math.min(study.length, math.min(_studyDailyDays, room));
+    final otherRoom = room - studyFloor;
+    final others = once.take(otherRoom).toList();
+    final studyKeep = study.take(room - others.length);
     final nextYear = addDays(t, 365);
     droppedReminders =
-        repeating.length - keep.length + once.skip(room).where((p) => p.when.isBefore(nextYear)).length;
-    return [...keep, ...once.take(room)]..sort(byWhen);
+        repeating.length - keep.length + once.skip(otherRoom).where((p) => p.when.isBefore(nextYear)).length;
+    return [...keep, ...others, ...studyKeep]..sort(byWhen);
+  }
+
+  /// Số ngày liên tiếp được nhắc ôn; sau đó thưa dần để tiết kiệm chỗ.
+  static const _studyDailyDays = 14;
+
+  /// iOS không cho đổi nội dung của lịch lặp, nên mỗi ngày đặt một nhắc riêng
+  /// kèm số từ đến hạn. Số này vẫn đúng nếu không mở app, vì hạn ôn chỉ đổi khi
+  /// mở app; khi mở app thì kế hoạch được tính lại. Ngày không có từ thì bỏ qua.
+  List<Planned> _studyPlan(DateTime now, DateTime t) {
+    final out = <Planned>[];
+    for (var i = 0; i < 60; i++) {
+      if (i >= _studyDailyDays && (i - _studyDailyDays) % 3 != 0) continue;
+      final d = addDays(t, i);
+      final when = atTime(d, settings.studyReminderTime);
+      if (!when.isAfter(now)) continue;
+      final n = cards.where((c) => !c.dueDate.isAfter(d)).length;
+      if (n == 0) continue;
+      out.add(Planned('study_${isoDate(d)}', when, 'Ôn từ vựng', 'Bạn có $n từ cần ôn hôm nay'));
+    }
+    return out;
+  }
+
+  List<int> _eventWeekdays(Event e) =>
+      e.repeatWeekdays.isEmpty ? [e.start.weekday] : e.repeatWeekdays;
+
+  /// Chỉ dùng lịch lặp của iOS khi chuỗi đã bắt đầu, không có ngày kết thúc và
+  /// không bỏ ngày nào sắp tới; nếu không thì iOS sẽ báo cả những ngày không có.
+  bool _canRepeatEvent(Event e, DateTime t) {
+    if (dateOnly(e.start).isAfter(t) || e.repeatUntil != null) return false;
+    final today = isoDate(t);
+    return !e.skipDates.any((s) => s.compareTo(today) >= 0);
   }
 
   bool _canRepeatWeekly(SpecialDay sd, DateTime t) {
@@ -271,6 +327,8 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> rescheduleNotifications() async {
+    _studyPlanStale = false;
+    _plannedOn = today;
     _flushDelivered();
     if (!settings.pushEnabled) {
       planned = [];
@@ -351,9 +409,16 @@ class AppStore extends ChangeNotifier {
 
   // ---------- sự kiện ----------
   List<Event> eventsOn(DateTime d) {
-    final l = events.where((e) => dateOnly(e.start) == dateOnly(d)).toList();
-    l.sort((a, b) => a.start.compareTo(b.start));
+    final l = events.where((e) => eventOccursOn(e, d)).toList();
+    int minutes(Event e) => e.start.hour * 60 + e.start.minute;
+    l.sort((a, b) => minutes(a).compareTo(minutes(b)));
     return l;
+  }
+
+  /// Xoá riêng một ngày khỏi chuỗi lặp, các ngày khác giữ nguyên.
+  void skipEventOn(Event e, DateTime d) {
+    e.skipDates = [...e.skipDates, isoDate(d)];
+    changed(reschedule: true);
   }
 
   void saveEvent(Event e) {
@@ -397,13 +462,27 @@ class AppStore extends ChangeNotifier {
         example: example?.trim().isEmpty ?? true ? null : example!.trim(),
         dueDate: today);
     cards.add(c);
+    _studyPlanStale = true;
     changed();
     return c;
   }
 
   void deleteCard(String id) {
     cards.removeWhere((c) => c.id == id);
+    _studyPlanStale = true;
     changed();
+  }
+
+  /// Ôn hoặc thêm thẻ làm lệch số từ trong nhắc ôn. Không đặt lại lịch sau mỗi
+  /// thẻ vì tốn nhiều lệnh gọi iOS; chờ khi rời màn hình hoặc thoát app.
+  bool _studyPlanStale = false;
+
+  /// Ngày lập kế hoạch gần nhất; sang ngày mới thì lập lại để kéo dài lịch nhắc.
+  DateTime? _plannedOn;
+  void flushStudyPlan() {
+    final newDay = _plannedOn != null && _plannedOn != today;
+    if (!_studyPlanStale && !newDay) return;
+    rescheduleNotifications();
   }
 
   Deck addDeck(String name) {
@@ -447,6 +526,7 @@ class AppStore extends ChangeNotifier {
       c.dueDate = sameDay ? today : addDays(today, 1);
     }
     _log(known);
+    _studyPlanStale = true;
     changed();
   }
 

@@ -1,37 +1,47 @@
 import 'package:flutter/material.dart';
 
 class C {
-  static const bg = Color(0xFFF7F6F3);
-  static const surface = Color(0xFFFFFFFF);
-  static const ink = Color(0xFF1A1A1F);
-  static const muted = Color(0xFF5F5E66);
-  static const border = Color(0xFFE7E5E0);
-  static const borderInput = Color(0xFFDAD7D0);
-  static const segmentBg = Color(0xFFECEAE5);
-  static const accentDefault = Color(0xFFD9472B);
-  static const accentSoftDefault = Color(0xFFFBE7E2);
-  static const blue = Color(0xFF2F5BD3);
-  static const green = Color(0xFF1F8A5B);
-  static const amber = Color(0xFFC77700);
-  static const sunday = Color(0xFFB3361F);
-  static const successBg = Color(0xFFE3F3EA);
-  static const successText = Color(0xFF145C3C);
-  static const errorBg = Color(0xFFFBE7E2);
-  static const errorText = Color(0xFF8E2A17);
-  static const streakBg = Color(0xFFFFF1D6);
-  static const streakText = Color(0xFF8A5300);
+  /// Do SoNgayApp đặt; đổi giá trị này phải dựng lại toàn bộ cây widget.
+  static bool dark = false;
+
+  static Color _c(int light, int night) => Color(dark ? night : light);
+
+  static Color get bg => _c(0xFFF7F6F3, 0xFF141418);
+  static Color get surface => _c(0xFFFFFFFF, 0xFF1F1F25);
+  static Color get ink => _c(0xFF1A1A1F, 0xFFF1F0EC);
+  static Color get muted => _c(0xFF5F5E66, 0xFFA9A8B0);
+  static Color get border => _c(0xFFE7E5E0, 0xFF2F2F37);
+  static Color get borderInput => _c(0xFFDAD7D0, 0xFF43434D);
+  static Color get segmentBg => _c(0xFFECEAE5, 0xFF2A2A31);
+  static Color get segmentSel => _c(0xFFFFFFFF, 0xFF44444F);
+  static Color get switchOff => _c(0xFFCFCCC5, 0xFF55555F);
+
+  /// Nền của nút và ô đang chọn, luôn đi với chữ trắng (khác [ink] là màu chữ).
+  static Color get fill => _c(0xFF1A1A1F, 0xFF3D3D47);
+  static Color get blue => _c(0xFF2F5BD3, 0xFF4F76E0);
+  static Color get green => _c(0xFF1F8A5B, 0xFF2BA471);
+  static Color get amber => _c(0xFFC77700, 0xFFD98A1A);
+  static Color get sunday => _c(0xFFB3361F, 0xFFE8674F);
+  static Color get successBg => _c(0xFFE3F3EA, 0xFF14342A);
+  static Color get successText => _c(0xFF145C3C, 0xFF7FDDB0);
+  static Color get errorBg => _c(0xFFFBE7E2, 0xFF3D1E18);
+  static Color get errorText => _c(0xFF8E2A17, 0xFFF4A796);
+  static Color get streakBg => _c(0xFFFFF1D6, 0xFF3A2C12);
+  static Color get streakText => _c(0xFF8A5300, 0xFFF0C274);
+  static Color get barSelected => _c(0xFF2F5BD3, 0xFF7B9BF0);
+  static Color get bar => _c(0xFF6F8DE0, 0xFF3F5FB8);
   static const accents = [Color(0xFFD9472B), Color(0xFF2F5BD3), Color(0xFF1F8A5B), Color(0xFF7A4FD1)];
 
   static (Color, Color) typeColors(String type) {
     switch (type) {
       case 'birthday':
-        return (const Color(0xFFFBE7E2), const Color(0xFFB3361F));
+        return (_c(0xFFFBE7E2, 0xFF3D1E18), _c(0xFFB3361F, 0xFFF4A796));
       case 'anniversary':
-        return (const Color(0xFFEFE7FB), const Color(0xFF5F3AAE));
+        return (_c(0xFFEFE7FB, 0xFF2E2545), _c(0xFF5F3AAE, 0xFFC5AEF5));
       case 'holiday':
-        return (const Color(0xFFE4EBFB), const Color(0xFF244BB0));
+        return (_c(0xFFE4EBFB, 0xFF1E2A4A), _c(0xFF244BB0, 0xFFA3BBF7));
       default:
-        return (const Color(0xFFECEAE5), const Color(0xFF3A3A40));
+        return (_c(0xFFECEAE5, 0xFF2A2A31), _c(0xFF3A3A40, 0xFFC9C8CF));
     }
   }
 
@@ -51,22 +61,31 @@ class C {
 
 extension AccentX on BuildContext {
   Color get accent => Theme.of(this).colorScheme.primary;
-  Color get accentSoft => Color.alphaBlend(accent.withValues(alpha: 0.14), Colors.white);
+  Color get accentSoft => Color.alphaBlend(accent.withValues(alpha: C.dark ? 0.22 : 0.14), C.surface);
 }
 
 ThemeData buildTheme(Color accent) {
+  // Màu chủ đạo vừa làm chữ vừa làm nền chữ trắng; nền tối cần sáng hơn một chút.
+  final primary = C.dark ? Color.alphaBlend(Colors.white.withValues(alpha: 0.18), accent) : accent;
   final base = ThemeData(
     useMaterial3: true,
     fontFamily: 'BeVietnamPro',
     scaffoldBackgroundColor: C.bg,
-    colorScheme: ColorScheme.fromSeed(seedColor: accent, primary: accent, surface: C.surface),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: accent,
+      brightness: C.dark ? Brightness.dark : Brightness.light,
+      primary: primary,
+      surface: C.surface,
+    ),
     splashFactory: NoSplash.splashFactory,
-    textTheme: ThemeData.light().textTheme.apply(fontFamily: 'BeVietnamPro', bodyColor: C.ink, displayColor: C.ink),
+    textTheme: (C.dark ? ThemeData.dark() : ThemeData.light())
+        .textTheme
+        .apply(fontFamily: 'BeVietnamPro', bodyColor: C.ink, displayColor: C.ink),
   );
   return base.copyWith(
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: C.ink,
+      backgroundColor: C.fill,
       contentTextStyle: const TextStyle(fontFamily: 'BeVietnamPro', color: Colors.white),
     ),
     dialogTheme: DialogThemeData(
@@ -76,8 +95,8 @@ ThemeData buildTheme(Color accent) {
   );
 }
 
-TextStyle ts(double size, {FontWeight w = FontWeight.w400, Color color = C.ink, double? h, double? ls, FontStyle? style}) =>
-    TextStyle(fontSize: size, fontWeight: w, color: color, height: h, letterSpacing: ls, fontStyle: style);
+TextStyle ts(double size, {FontWeight w = FontWeight.w400, Color? color, double? h, double? ls, FontStyle? style}) =>
+    TextStyle(fontSize: size, fontWeight: w, color: color ?? C.ink, height: h, letterSpacing: ls, fontStyle: style);
 
 // ---------- widget dùng chung ----------
 
@@ -101,14 +120,14 @@ class Tap extends StatelessWidget {
 class Box extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color color;
+  final Color? color;
   final double radius;
   final bool bordered;
   const Box({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.color = C.surface,
+    this.color,
     this.radius = 18,
     this.bordered = true,
   });
@@ -116,7 +135,7 @@ class Box extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: padding,
         decoration: BoxDecoration(
-          color: color,
+          color: color ?? C.surface,
           borderRadius: BorderRadius.circular(radius),
           border: bordered ? Border.all(color: C.border) : null,
         ),
@@ -160,7 +179,7 @@ class Pill extends StatelessWidget {
       {super.key, this.selected = false, this.onTap, this.onLongPress, this.dashed = false, this.selColor, this.compact = false});
   @override
   Widget build(BuildContext context) {
-    final sel = selColor ?? C.ink;
+    final sel = selColor ?? C.fill;
     return Tap(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -201,7 +220,7 @@ class Segmented extends StatelessWidget {
                   height: 40,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: i == index ? C.surface : Colors.transparent,
+                    color: i == index ? C.segmentSel : Colors.transparent,
                     borderRadius: BorderRadius.circular(11),
                     boxShadow: i == index
                         ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))]
@@ -225,7 +244,7 @@ class BigButton extends StatelessWidget {
   const BigButton(this.text, this.onTap, {super.key, this.color, this.textColor = Colors.white, this.outlined = false});
   @override
   Widget build(BuildContext context) {
-    final bg = outlined ? C.surface : (color ?? C.ink);
+    final bg = outlined ? C.surface : (color ?? C.fill);
     return Tap(
       onTap: onTap,
       child: Opacity(
@@ -279,9 +298,9 @@ InputDecoration inputDeco(String? hint) => InputDecoration(
       filled: true,
       fillColor: C.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.borderInput)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.borderInput)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: C.ink, width: 1.5)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: C.borderInput)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: C.borderInput)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: C.ink, width: 1.5)),
     );
 
 class Switch2 extends StatelessWidget {
@@ -302,7 +321,7 @@ class Switch2 extends StatelessWidget {
             padding: const EdgeInsets.all(3),
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             decoration: BoxDecoration(
-              color: value ? context.accent : const Color(0xFFCFCCC5),
+              color: value ? context.accent : C.switchOff,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Container(

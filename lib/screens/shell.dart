@@ -19,6 +19,7 @@ class Nav extends ChangeNotifier {
   AppPage page = AppPage.today;
   SpecialDay? editing;
   void go(AppPage p, {SpecialDay? edit}) {
+    store.flushStudyPlan();
     page = p;
     editing = edit;
     notifyListeners();
@@ -124,7 +125,7 @@ class _ShellState extends State<Shell> {
                 width: expanded ? 224 : 64,
                 decoration: BoxDecoration(
                   color: C.surface,
-                  border: const Border(right: BorderSide(color: C.border)),
+                  border: Border(right: BorderSide(color: C.border)),
                   boxShadow: expanded
                       ? [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 24)]
                       : null,
@@ -149,8 +150,8 @@ class _ShellState extends State<Shell> {
                       ]),
                       const SizedBox(height: 8),
                       _item(Icons.add_rounded, 'Thêm ngày mới', AppPage.add, dark: true),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Divider(height: 1, color: C.border),
                       ),
                       _item(Icons.today_rounded, 'Hôm nay', AppPage.today),
@@ -225,7 +226,7 @@ class _ShellState extends State<Shell> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0),
       decoration: BoxDecoration(
-        color: dark ? C.ink : (sel ? context.accentSoft : Colors.transparent),
+        color: dark ? C.fill : (sel ? context.accentSoft : Colors.transparent),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(

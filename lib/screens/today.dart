@@ -103,7 +103,7 @@ class TodayScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text('Hôm nay chưa có việc nào.', style: ts(14, color: C.muted)),
                   )
-                : Column(children: [for (final e in events) EventRow(e)]),
+                : Column(children: [for (final e in events) EventRow(e, on: t)]),
           ),
           const SizedBox(height: 24),
           Text('Đếm ngược', style: ts(18, w: FontWeight.w700)),

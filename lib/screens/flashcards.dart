@@ -103,7 +103,7 @@ class _StudyTabState extends State<StudyTab> {
       return Box(
         padding: const EdgeInsets.all(24),
         child: Column(children: [
-          const Icon(Icons.check_circle_outline_rounded, size: 48, color: C.green),
+          Icon(Icons.check_circle_outline_rounded, size: 48, color: C.green),
           const SizedBox(height: 12),
           Text(queue.isEmpty ? 'Không có thẻ nào cần ôn hôm nay' : 'Xong lượt ôn!', style: ts(17, w: FontWeight.w700)),
           if (_nextDue(all) != null)
@@ -161,7 +161,7 @@ class _StudyTabState extends State<StudyTab> {
             height: 300,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: flipped ? C.ink : C.surface,
+              color: flipped ? C.fill : C.surface,
               borderRadius: BorderRadius.circular(26),
               border: flipped ? null : Border.all(color: C.border),
             ),
@@ -297,7 +297,7 @@ class _AddWordTabState extends State<AddWordTab> {
                 Text('$total từ · tìm kiếm và xoá', style: ts(13, color: C.muted)),
               ]),
             ),
-            const Icon(Icons.chevron_right_rounded, color: C.muted),
+            Icon(Icons.chevron_right_rounded, color: C.muted),
           ]),
         ),
       ),
@@ -363,12 +363,12 @@ class _VocabBankScreenState extends State<VocabBankScreen> {
                   textInputAction: TextInputAction.search,
                   onChanged: (_) => setState(() {}),
                   decoration: inputDeco('Tìm từ hoặc nghĩa').copyWith(
-                    prefixIcon: const Icon(Icons.search_rounded, color: C.muted),
+                    prefixIcon: Icon(Icons.search_rounded, color: C.muted),
                     suffixIcon: q.isEmpty
                         ? null
                         : IconButton(
                             tooltip: 'Xoá nội dung tìm',
-                            icon: const Icon(Icons.close_rounded, color: C.muted),
+                            icon: Icon(Icons.close_rounded, color: C.muted),
                             onPressed: () => setState(search.clear),
                           ),
                   ),

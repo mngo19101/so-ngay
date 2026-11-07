@@ -30,7 +30,7 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
                   height: 44,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(22)),
+                  decoration: BoxDecoration(color: C.fill, borderRadius: BorderRadius.circular(22)),
                   child: Text('+ Thêm', style: ts(14, w: FontWeight.w700, color: Colors.white)),
                 ),
               )),
