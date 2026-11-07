@@ -86,9 +86,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
             const SizedBox(height: 20),
             Row(children: [
               Expanded(
-                child: Text(
-                    '${isToday ? 'Hôm nay · ' : ''}${wdFull(sel)}, ${dm(sel)} — Âm lịch ${lunarDm(sel)}',
-                    style: ts(16, w: FontWeight.w700)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${isToday ? 'Hôm nay · ' : ''}${wdFull(sel)}, ${dm(sel)}', style: ts(16, w: FontWeight.w700)),
+                  Text('Âm lịch ${lunarDm(sel)}', style: ts(12, color: C.muted)),
+                ]),
               ),
               Tap(
                 label: 'Thêm sự kiện',

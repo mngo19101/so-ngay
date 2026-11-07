@@ -13,6 +13,7 @@ Future<void> showEventSheet(BuildContext context, DateTime date, {Event? edit}) 
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: C.bg,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
     builder: (c) => Padding(
@@ -47,7 +48,18 @@ class _EventFormState extends State<_EventForm> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.edit == null ? 'Thêm sự kiện' : 'Sửa sự kiện', style: ts(20, w: FontWeight.w700)),
+          Row(children: [
+            Expanded(child: Text(widget.edit == null ? 'Thêm sự kiện' : 'Sửa sự kiện', style: ts(20, w: FontWeight.w700))),
+            if (widget.edit != null)
+              IconBtn(Icons.delete_outline_rounded, 'Xoá sự kiện', () async {
+                if (await confirm(context, 'Xoá "${widget.edit!.title}"?', 'Sự kiện và nhắc nhở của nó sẽ bị xoá.')) {
+                  store.deleteEvent(widget.edit!.id);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              }),
+            const SizedBox(width: 8),
+            IconBtn(Icons.close_rounded, 'Đóng', () => Navigator.pop(context)),
+          ]),
           const SizedBox(height: 16),
           Field('Tiêu đề', title, hint: 'Ví dụ: Học Python'),
           const SizedBox(height: 14),
@@ -103,13 +115,6 @@ class _EventFormState extends State<_EventForm> {
             store.saveEvent(e);
             Navigator.pop(context);
           }),
-          if (widget.edit != null) ...[
-            const SizedBox(height: 10),
-            BigButton('Xoá sự kiện', () {
-              store.deleteEvent(widget.edit!.id);
-              Navigator.pop(context);
-            }, outlined: true, textColor: C.sunday),
-          ],
         ]),
       ),
     );
@@ -146,6 +151,9 @@ class EventRow extends StatelessWidget {
     ].join(' · ');
     return Tap(
       onTap: () => showEventSheet(context, e.start, edit: e),
+      onLongPress: () async {
+        if (await confirm(context, 'Xoá "${e.title}"?', 'Sự kiện và nhắc nhở của nó sẽ bị xoá.')) store.deleteEvent(e.id);
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(children: [

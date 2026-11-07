@@ -164,16 +164,17 @@ class Pill extends StatelessWidget {
     return Tap(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: ConstrainedBox(
+      child: Container(
         constraints: const BoxConstraints(minHeight: 44),
-        child: Container(
-          alignment: Alignment.center,
-          padding: compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? sel : C.surface,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: selected ? sel : C.borderInput),
-          ),
+        padding: compact ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? sel : C.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: selected ? sel : C.borderInput),
+        ),
+        child: Center(
+          widthFactor: 1,
+          heightFactor: 1,
           child: Text(text,
               style: ts(14, w: FontWeight.w600, color: selected ? Colors.white : (dashed ? C.muted : C.ink))),
         ),
