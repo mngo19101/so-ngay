@@ -25,12 +25,6 @@ class _StudyInputScreenState extends State<StudyInputScreen> {
 
   void _edited() => setState(() => saved = null);
 
-  void _setQuick(int m) {
-    hours.text = m ~/ 60 == 0 ? '' : '${m ~/ 60}';
-    mins.text = m % 60 == 0 ? '' : '${m % 60}';
-    _edited();
-  }
-
   void _save() {
     final sid = subjectId ?? (store.subjects.isNotEmpty ? store.subjects.first.id : null);
     if (sid == null) return;
@@ -183,11 +177,6 @@ class _StudyInputScreenState extends State<StudyInputScreen> {
                 Expanded(child: _num(hours, 'giờ', 'Số giờ')),
                 const SizedBox(width: 12),
                 Expanded(child: _num(mins, 'phút', 'Số phút')),
-              ]),
-              const SizedBox(height: 10),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final q in const [(30, '30p'), (60, '1g'), (90, '1g30'), (120, '2g'), (180, '3g')])
-                  Pill(q.$2, onTap: () => _setQuick(q.$1)),
               ]),
               const SizedBox(height: 18),
               BigButton(subtract ? 'Trừ giờ đã chọn' : 'Lưu phiên học', canSave ? _save : null, color: context.accent),

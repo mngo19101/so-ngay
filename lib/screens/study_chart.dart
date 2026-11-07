@@ -285,7 +285,9 @@ class _StudyChartScreenState extends State<StudyChartScreen> {
 
   Widget _goalView(List<_Bucket> bs, int goalPer, int goalTotal, int total, int si) {
     final frac = goalTotal == 0 ? 0.0 : (total / goalTotal).clamp(0.0, 1.0);
-    return Column(children: [
+    return SizedBox(
+      width: double.infinity,
+      child: Column(children: [
       SizedBox(
         width: 170,
         height: 170,
@@ -304,12 +306,12 @@ class _StudyChartScreenState extends State<StudyChartScreen> {
         for (var i = 0; i < bs.length; i++) _miniRing(bs[i], goalPer, i == si, () => setState(() => sel = i)),
       ]),
       const SizedBox(height: 14),
-      Wrap(spacing: 14, runSpacing: 6, children: [
+      Wrap(spacing: 14, runSpacing: 6, alignment: WrapAlignment.center, children: [
         _legend(C.green, 'Đạt', true),
         _legend(C.borderInput, 'Chưa đạt', false),
         _legend(C.borderInput, 'Chưa tới', false, dashed: true),
       ]),
-    ]);
+    ]));
   }
 
   Widget _miniRing(_Bucket b, int goalPer, bool selected, VoidCallback tap) {
