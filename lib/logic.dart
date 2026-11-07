@@ -93,10 +93,22 @@ class Planned {
   final String key;
   final DateTime when;
   final String title, body;
-  Planned(this.key, this.when, this.title, this.body);
-  Map<String, dynamic> toJson() => {'key': key, 'when': when.toIso8601String(), 'title': title, 'body': body};
+
+  /// null = một lần; daily | weekly | yearly = iOS tự lặp mãi, không cần mở app.
+  final String? repeat;
+  Planned(this.key, this.when, this.title, this.body, {this.repeat});
+  Map<String, dynamic> toJson() =>
+      {'key': key, 'when': when.toIso8601String(), 'title': title, 'body': body, 'repeat': repeat};
   factory Planned.fromJson(Map<String, dynamic> j) =>
-      Planned(j['key'], DateTime.parse(j['when']), j['title'], j['body']);
+      Planned(j['key'], DateTime.parse(j['when']), j['title'], j['body'], repeat: j['repeat']);
+
+  /// Lần nổ kế tiếp sau [w], hoặc null nếu không lặp.
+  DateTime? after(DateTime w) => switch (repeat) {
+        'daily' => DateTime(w.year, w.month, w.day + 1, w.hour, w.minute),
+        'weekly' => DateTime(w.year, w.month, w.day + 7, w.hour, w.minute),
+        'yearly' => DateTime(w.year + 1, w.month, w.day, w.hour, w.minute),
+        _ => null,
+      };
 }
 
 DateTime atTime(DateTime day, String hhmm) {

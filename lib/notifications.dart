@@ -46,7 +46,8 @@ class NotificationService {
   }
 
   NotificationDetails _details(bool sound) => NotificationDetails(
-        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: sound),
+        iOS: DarwinNotificationDetails(
+            presentAlert: true, presentBanner: true, presentList: true, presentBadge: true, presentSound: sound),
         android: AndroidNotificationDetails('songay', 'Sổ Ngày',
             channelDescription: 'Nhắc ngày đặc biệt và lịch', importance: Importance.high, playSound: sound),
       );
@@ -71,6 +72,12 @@ class NotificationService {
           scheduledDate: tz.TZDateTime.from(p.when, tz.local),
           notificationDetails: _details(sound),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          matchDateTimeComponents: switch (p.repeat) {
+            'daily' => DateTimeComponents.time,
+            'weekly' => DateTimeComponents.dayOfWeekAndTime,
+            'yearly' => DateTimeComponents.dateAndTime,
+            _ => null,
+          },
         );
       }
     } catch (e) {
@@ -78,13 +85,34 @@ class NotificationService {
     }
   }
 
-  Future<void> showNow(String title, String body, {required bool sound}) async {
-    if (!_ready) return;
+  /// Trả về false nếu chưa được cấp quyền hoặc gửi lỗi.
+  Future<bool> showNow(String title, String body, {required bool sound}) async {
+    if (!await requestPermission()) return false;
     try {
-      await requestPermission();
       await _plugin.show(id: 0, title: title, body: body, notificationDetails: _details(sound));
+      return true;
     } catch (e) {
       debugPrint('show failed: $e');
+      return false;
+    }
+  }
+
+  /// Thông báo thử đến sau [delay], để kiểm tra khi đã thoát app hoặc khoá máy.
+  Future<bool> showLater(String title, String body, Duration delay, {required bool sound}) async {
+    if (!await requestPermission()) return false;
+    try {
+      await _plugin.zonedSchedule(
+        id: 9999,
+        title: title,
+        body: body,
+        scheduledDate: tz.TZDateTime.now(tz.local).add(delay),
+        notificationDetails: _details(sound),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('showLater failed: $e');
+      return false;
     }
   }
 }

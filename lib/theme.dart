@@ -372,7 +372,7 @@ class ScreenHeader extends StatelessWidget {
 void toast(BuildContext context, String msg) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
+    ..showSnackBar(SnackBar(content: Text(msg), duration: Duration(seconds: msg.length > 40 ? 5 : 2)));
 }
 
 Future<bool> confirm(BuildContext context, String title, String body, {String ok = 'Xoá'}) async {

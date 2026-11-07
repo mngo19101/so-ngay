@@ -155,27 +155,82 @@ class AppStore extends ChangeNotifier {
     final now = DateTime.now();
     final done = planned.where((p) => !p.when.isAfter(now)).toList();
     for (final p in done) {
-      if (settings.pushEnabled) {
-        notifLogs.insert(0, NotificationLog(newId(), p.title, p.body, p.when.toIso8601String(), false));
+      if (!settings.pushEnabled) continue;
+      // Thẻ lặp có thể đã nổ nhiều lần trong lúc không mở app.
+      DateTime? w = p.when;
+      for (var guard = 0; w != null && !w.isAfter(now) && guard < 400; guard++) {
+        notifLogs.add(NotificationLog(newId(), p.title, p.body, w.toIso8601String(), false));
+        w = p.after(w);
       }
     }
     planned.removeWhere((p) => !p.when.isAfter(now));
+    notifLogs.sort((a, b) => b.sentAt.compareTo(a.sentAt));
     if (notifLogs.length > 100) notifLogs = notifLogs.sublist(0, 100);
   }
 
+  /// iOS chỉ giữ tối đa 64 lịch chờ; chừa 1 chỗ cho thông báo thử.
+  static const _maxPending = 63;
+
+  /// Giữ chỗ cho nhắc một lần (sự kiện, âm lịch) để lịch lặp không chiếm hết.
+  static const _maxRepeating = 43;
+
+  /// Số nhắc không xếp được vào giới hạn của iOS (lịch lặp, hoặc trong vòng 1 năm tới).
+  int droppedReminders = 0;
+
+  /// Lịch lặp do iOS tự chạy nên vẫn báo dù không mở app. Nội dung của chúng
+  /// phải cố định. Âm lịch và sự kiện không lặp theo dương lịch được nên đặt
+  /// sẵn từng lần, gần nhất trước.
   List<Planned> buildPlan() {
     final now = DateTime.now();
     final t = today;
-    final horizon = addDays(t, 60);
-    final out = <Planned>[];
+    final horizon = addDays(t, 365 * 5);
+    final repeating = <Planned>[];
+    final once = <Planned>[];
+
+    DateTime nextDaily(String hhmm) {
+      final w = atTime(t, hhmm);
+      return w.isAfter(now) ? w : atTime(addDays(t, 1), hhmm);
+    }
+
+    if (settings.morningEnabled) {
+      repeating.add(Planned('morning', nextDaily(settings.morningTime), 'Tóm tắt buổi sáng',
+          'Xem việc hôm nay và những ngày sắp tới', repeat: 'daily'));
+    }
+    if (settings.studyReminder && cards.isNotEmpty) {
+      repeating.add(Planned('study', nextDaily('20:00'), 'Ôn từ vựng', 'Đến giờ ôn từ vựng rồi', repeat: 'daily'));
+    }
+
     for (final sd in specialDays.where((s) => s.enabled)) {
-      final occs = occurrencesBetween(sd, t, addDays(horizon, 8));
-      for (final occ in occs) {
-        for (final off in sd.remindOffsetsDays) {
-          final when = atTime(addDays(occ, -off), sd.notifyTime);
-          if (when.isAfter(now) && !when.isAfter(addDays(horizon, 1))) {
-            out.add(Planned('sd_${sd.id}_${isoDate(occ)}_$off', when, 'SỔ NGÀY · ${sd.notifyTime}',
-                '${reminderText(off, sd.name)} ${wdFull(occ)} ${dm(occ)}'));
+      for (final off in sd.remindOffsetsDays) {
+        final title = 'SỔ NGÀY · ${sd.notifyTime}';
+        final key = 'sd_${sd.id}_$off';
+        if (_canRepeatWeekly(sd, t)) {
+          for (final wd in sd.repeatWeekdays) {
+            for (var i = 0; i < 8; i++) {
+              final d = addDays(t, i);
+              final when = atTime(d, sd.notifyTime);
+              if (addDays(d, off).weekday == wd && when.isAfter(now)) {
+                repeating.add(Planned('${key}_w$wd', when, title, '${reminderText(off, sd.name)} ${weekdayFull[wd - 1]}',
+                    repeat: 'weekly'));
+                break;
+              }
+            }
+          }
+        } else if (_canRepeatYearly(sd, off)) {
+          for (var y = t.year; y <= t.year + 2; y++) {
+            final when = atTime(addDays(DateTime(y, sd.month, sd.day), -off), sd.notifyTime);
+            if (when.isAfter(now)) {
+              repeating.add(Planned(key, when, title, '${reminderText(off, sd.name)} (${sd.day}/${sd.month})',
+                  repeat: 'yearly'));
+              break;
+            }
+          }
+        } else {
+          for (final occ in occurrencesBetween(sd, t, addDays(horizon, off))) {
+            final when = atTime(addDays(occ, -off), sd.notifyTime);
+            if (when.isAfter(now) && !when.isAfter(horizon)) {
+              once.add(Planned('${key}_${isoDate(occ)}', when, title, '${reminderText(off, sd.name)} ${wdFull(occ)} ${dm(occ)}'));
+            }
           }
         }
       }
@@ -183,47 +238,36 @@ class AppStore extends ChangeNotifier {
     for (final e in events) {
       for (final m in e.remindBeforeMin) {
         final when = e.start.subtract(Duration(minutes: m));
-        if (when.isAfter(now) && when.isBefore(horizon)) {
-          out.add(Planned('ev_${e.id}_$m', when, 'Sắp tới: ${e.title}',
+        if (when.isAfter(now)) {
+          once.add(Planned('ev_${e.id}_$m', when, 'Sắp tới: ${e.title}',
               '${e.start.hour.toString().padLeft(2, '0')}:${e.start.minute.toString().padLeft(2, '0')}${e.location != null && e.location!.isNotEmpty ? ' · ${e.location}' : ''}'));
         }
       }
     }
-    out.sort((a, b) => a.when.compareTo(b.when));
-    final res = out.take(46).toList();
-    if (settings.morningEnabled) {
-      for (var i = 0; i < 7; i++) {
-        final d = addDays(t, i);
-        final when = atTime(d, settings.morningTime);
-        if (!when.isAfter(now)) continue;
-        final n = eventsOn(d).length;
-        final up = _nearestAfter(d);
-        res.add(Planned('morning_${isoDate(d)}', when, 'Tóm tắt buổi sáng',
-            'Hôm nay có $n việc${up != null ? ' · còn ${up.daysLeft} ngày đến ${up.sd.name}' : ''}'));
-      }
-    }
-    if (settings.studyReminder) {
-      for (var i = 0; i < 7; i++) {
-        final d = addDays(t, i);
-        final when = atTime(d, '20:00');
-        if (!when.isAfter(now)) continue;
-        final n = cards.where((c) => !c.dueDate.isAfter(d)).length;
-        if (n > 0) res.add(Planned('study_${isoDate(d)}', when, 'Ôn từ vựng', 'Bạn có $n từ cần ôn hôm nay'));
-      }
-    }
-    res.sort((a, b) => a.when.compareTo(b.when));
-    return res.take(60).toList();
+
+    int byWhen(Planned a, Planned b) => a.when.compareTo(b.when);
+    repeating.sort(byWhen);
+    once.sort(byWhen);
+    final keep = repeating.take(_maxRepeating).toList();
+    final room = _maxPending - keep.length;
+    final nextYear = addDays(t, 365);
+    droppedReminders =
+        repeating.length - keep.length + once.skip(room).where((p) => p.when.isBefore(nextYear)).length;
+    return [...keep, ...once.take(room)]..sort(byWhen);
   }
 
-  SpecialOcc? _nearestAfter(DateTime d) {
-    SpecialOcc? best;
-    for (final sd in specialDays.where((s) => s.enabled && s.repeat != 'weekly')) {
-      final n = nextOccurrence(sd, d);
-      if (n == null) continue;
-      final left = diffDays(n, d);
-      if (best == null || left < best.daysLeft) best = SpecialOcc(sd, n, left);
-    }
-    return best;
+  bool _canRepeatWeekly(SpecialDay sd, DateTime t) {
+    if (sd.repeat != 'weekly' || sd.repeatWeekdays.isEmpty) return false;
+    return sd.year == null || !DateTime(sd.year!, sd.month, sd.day).isAfter(t);
+  }
+
+  /// Dương lịch hằng năm, trừ khi ngày nhắc lệch giữa năm nhuận và năm thường.
+  bool _canRepeatYearly(SpecialDay sd, int off) {
+    if (sd.repeat != 'yearly' || sd.calendar != 'solar') return false;
+    if (sd.month == 2 && sd.day == 29) return false;
+    final a = addDays(DateTime(2027, sd.month, sd.day), -off);
+    final b = addDays(DateTime(2028, sd.month, sd.day), -off);
+    return a.month == b.month && a.day == b.day;
   }
 
   Future<void> rescheduleNotifications() async {
@@ -253,12 +297,19 @@ class AppStore extends ChangeNotifier {
     changed();
   }
 
-  Future<void> sendTest() async {
-    final title = 'SỔ NGÀY · thử';
+  /// Gửi thử; [delay] khác null thì hẹn giờ. Trả về false nếu iOS chưa cấp quyền.
+  Future<bool> sendTest({Duration? delay}) async {
+    const title = 'SỔ NGÀY · thử';
     const body = 'Thông báo hoạt động bình thường.';
-    await NotificationService.instance.showNow(title, body, sound: settings.sound);
-    notifLogs.insert(0, NotificationLog(newId(), title, body, DateTime.now().toIso8601String(), false));
-    changed();
+    final n = NotificationService.instance;
+    final ok = delay == null
+        ? await n.showNow(title, body, sound: settings.sound)
+        : await n.showLater(title, body, delay, sound: settings.sound);
+    if (ok) {
+      notifLogs.insert(0, NotificationLog(newId(), title, body, DateTime.now().toIso8601String(), false));
+      changed();
+    }
+    return ok;
   }
 
   // ---------- ngày đặc biệt ----------

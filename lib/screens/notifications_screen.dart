@@ -9,6 +9,8 @@ import '../theme.dart';
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
+  static const _denied = 'Chưa có quyền. Vào Cài đặt iPhone > Thông báo > Sổ Ngày và bật Cho phép thông báo';
+
   String _when(String iso) {
     final d = DateTime.parse(iso);
     final t = store.today;
@@ -64,7 +66,7 @@ class NotificationsScreen extends StatelessWidget {
                 store.updateSettings((x) => x.pushEnabled = v, reschedule: true);
               }),
               const Divider(height: 1, color: C.border),
-              _sw('Tóm tắt mỗi sáng', 'Lúc ${s.morningTime} · việc hôm nay + ngày sắp tới', s.morningEnabled,
+              _sw('Nhắc mỗi sáng', 'Lúc ${s.morningTime} · nhắc xem việc hôm nay', s.morningEnabled,
                   (v) => store.updateSettings((x) => x.morningEnabled = v, reschedule: true),
                   trailing: Tap(
                     onTap: () async {
@@ -78,16 +80,33 @@ class NotificationsScreen extends StatelessWidget {
                     child: const Padding(padding: EdgeInsets.all(10), child: Icon(Icons.schedule_rounded, size: 20, color: C.muted)),
                   )),
               const Divider(height: 1, color: C.border),
-              _sw('Nhắc ôn từ vựng', 'Mỗi tối 20:00 nếu còn thẻ đến hạn', s.studyReminder,
+              _sw('Nhắc ôn từ vựng', 'Mỗi tối 20:00', s.studyReminder,
                   (v) => store.updateSettings((x) => x.studyReminder = v, reschedule: true)),
               const Divider(height: 1, color: C.border),
               _sw('Âm thanh', 'Phát tiếng khi có thông báo', s.sound, (v) => store.updateSettings((x) => x.sound = v, reschedule: true)),
             ]),
           ),
+          if (store.droppedReminders > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Box(
+                color: C.errorBg,
+                bordered: false,
+                child: Text(
+                  'iPhone chỉ giữ tối đa 64 lịch nhắc nên còn ${store.droppedReminders} nhắc chưa xếp được. Hãy tắt bớt ngày không cần, hoặc bớt số lần nhắc trước.',
+                  style: ts(13, color: C.errorText, h: 1.35),
+                ),
+              ),
+            ),
           const SizedBox(height: 12),
           BigButton('Gửi thông báo thử', () async {
-            await store.sendTest();
-            if (context.mounted) toast(context, 'Đã gửi thông báo thử');
+            final ok = await store.sendTest();
+            if (context.mounted) toast(context, ok ? 'Đã gửi thông báo thử' : _denied);
+          }, outlined: true, textColor: C.ink),
+          const SizedBox(height: 8),
+          BigButton('Thử khi thoát app (sau 10 giây)', () async {
+            final ok = await store.sendTest(delay: const Duration(seconds: 10));
+            if (context.mounted) toast(context, ok ? 'Thoát ra màn hình chính hoặc khoá máy, thông báo đến sau 10 giây' : _denied);
           }, outlined: true, textColor: C.ink),
           const SizedBox(height: 24),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [

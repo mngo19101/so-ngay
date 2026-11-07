@@ -50,6 +50,41 @@ void main() {
     }
   });
 
+  testWidgets('lịch nhắc không phụ thuộc việc mở app', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await store.load();
+    final t = store.today;
+    store.settings.morningEnabled = true;
+    store.settings.studyReminder = true;
+    store.specialDays = [
+      SpecialDay(id: 'sol', name: 'Sinh nhật', day: 15, month: 6, remindOffsetsDays: [0]),
+      SpecialDay(id: 'leap', name: 'Đầu tháng 3', day: 1, month: 3, remindOffsetsDays: [1]),
+      SpecialDay(id: 'lun', name: 'Giỗ', calendar: 'lunar', day: 3, month: 2, remindOffsetsDays: [0]),
+      SpecialDay(id: 'wk', name: 'Học nhóm', day: 1, month: 1, repeat: 'weekly', repeatWeekdays: [2]),
+    ];
+    final far = DateTime(t.year + 3, 1, 1, 9);
+    store.events = [Event(id: 'e', title: 'Xa', start: far, remindBeforeMin: [0])];
+    final plan = store.buildPlan();
+    String? rep(String key) => plan.firstWhere((p) => p.key == key).repeat;
+    expect(rep('morning'), 'daily');
+    expect(rep('study'), 'daily');
+    expect(rep('sd_sol_0'), 'yearly');
+    expect(rep('sd_wk_0_w2'), 'weekly');
+    // Âm lịch và ngày lệch theo năm nhuận không lặp được: đặt nhiều lần trước.
+    expect(plan.where((p) => p.key.startsWith('sd_lun_0_')).length, greaterThan(3));
+    expect(plan.where((p) => p.key.startsWith('sd_leap_1_')).length, greaterThan(3));
+    expect(plan.any((p) => p.key == 'ev_e_0' && p.when == far), isTrue);
+    expect(store.droppedReminders, 0);
+
+    store.specialDays = [
+      for (var i = 0; i < 80; i++) SpecialDay(id: 's$i', name: 'n$i', day: 1 + i % 28, month: 1 + i % 12),
+    ];
+    final full = store.buildPlan();
+    expect(full.length, lessThanOrEqualTo(63));
+    expect(full.any((p) => p.key == 'ev_e_0'), isTrue);
+    expect(store.droppedReminders, greaterThan(0));
+  });
+
   testWidgets('thêm phiên học và sự kiện', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await store.load();

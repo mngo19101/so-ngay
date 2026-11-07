@@ -12,6 +12,8 @@ Future<void> main() async {
   await NotificationService.instance.init();
   await store.load();
   runApp(const SoNgayApp());
+  // Xin quyền ngay lần mở đầu, nếu không các lịch nhắc sẽ không bao giờ hiện.
+  if (store.settings.pushEnabled) await NotificationService.instance.requestPermission();
   store.rescheduleNotifications();
 }
 
