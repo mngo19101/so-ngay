@@ -114,11 +114,14 @@ class Deck {
   factory Deck.fromJson(Map<String, dynamic> j) => Deck(j['id'], j['name']);
 }
 
+/// Khoảng cách (ngày) giữa các lần ôn theo đường cong quên.
+const srsSchedule = [1, 3, 7, 14, 30, 60, 120, 240];
+
 class Card {
   String id, deckId, word, meaning;
   String? ipa, partOfSpeech, example;
   DateTime dueDate;
-  int intervalDays, correctCount, wrongCount;
+  int intervalDays, correctCount, wrongCount, stage;
   double ease;
   Card({
     required this.id,
@@ -133,6 +136,7 @@ class Card {
     this.ease = 2.5,
     this.correctCount = 0,
     this.wrongCount = 0,
+    this.stage = 0,
   });
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -147,6 +151,7 @@ class Card {
         'ease': ease,
         'correctCount': correctCount,
         'wrongCount': wrongCount,
+        'stage': stage,
       };
   factory Card.fromJson(Map<String, dynamic> j) => Card(
         id: j['id'],
@@ -161,6 +166,7 @@ class Card {
         ease: (j['ease'] ?? 2.5).toDouble(),
         correctCount: j['correctCount'] ?? 0,
         wrongCount: j['wrongCount'] ?? 0,
+        stage: j['stage'] ?? srsSchedule.where((d) => d <= (j['intervalDays'] ?? 0)).length,
       );
 }
 

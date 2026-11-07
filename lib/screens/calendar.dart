@@ -26,6 +26,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
         selected = (month.year == t.year && month.month == t.month) ? t : month;
       });
 
+  Future<void> _pickMonth() async {
+    final r = await showModalBottomSheet<DateTime>(
+      context: context,
+      backgroundColor: C.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _MonthPicker(initial: month, today: store.today),
+    );
+    if (r == null) return;
+    setState(() {
+      month = DateTime(r.year, r.month);
+      final t = store.today;
+      selected = (month.year == t.year && month.month == t.month) ? t : month;
+    });
+  }
+
   List<SpecialDay> _specials(DateTime d) {
     if (_cacheVer != store.version || _cacheMonth != month) {
       _sp.clear();
@@ -61,7 +76,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Tháng ${month.month}, ${month.year}', style: ts(22, w: FontWeight.w700, ls: -0.3)),
+                  Tap(
+                    label: 'Chọn tháng và năm',
+                    onTap: _pickMonth,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Flexible(child: Text('Tháng ${month.month}, ${month.year}', style: ts(22, w: FontWeight.w700, ls: -0.3))),
+                      const Icon(Icons.arrow_drop_down_rounded, size: 26),
+                    ]),
+                  ),
                   Text(sub, style: ts(13, color: C.muted)),
                 ]),
               ),
@@ -177,6 +199,68 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ]),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MonthPicker extends StatefulWidget {
+  final DateTime initial, today;
+  const _MonthPicker({required this.initial, required this.today});
+  @override
+  State<_MonthPicker> createState() => _MonthPickerState();
+}
+
+class _MonthPickerState extends State<_MonthPicker> {
+  late int year = widget.initial.year;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            IconBtn(Icons.chevron_left_rounded, 'Năm trước', () => setState(() => year--)),
+            Expanded(child: Center(child: Text('$year', style: ts(22, w: FontWeight.w700)))),
+            IconBtn(Icons.chevron_right_rounded, 'Năm sau', () => setState(() => year++)),
+          ]),
+          const SizedBox(height: 16),
+          GridView.count(
+            crossAxisCount: 4,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.7,
+            children: [
+              for (var m = 1; m <= 12; m++)
+                Tap(
+                  label: 'Tháng $m năm $year',
+                  onTap: () => Navigator.pop(context, DateTime(year, m)),
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: (year == widget.initial.year && m == widget.initial.month) ? C.ink : Colors.transparent,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: (year == widget.today.year && m == widget.today.month) ? context.accent : C.borderInput,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Text('Tháng $m',
+                        style: ts(14, w: FontWeight.w600, color: (year == widget.initial.year && m == widget.initial.month) ? Colors.white : C.ink)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Tap(
+            label: 'Về hôm nay',
+            onTap: () => Navigator.pop(context, widget.today),
+            child: Padding(padding: const EdgeInsets.all(10), child: Text('Về hôm nay', style: ts(14, w: FontWeight.w600, color: context.accent))),
+          ),
+        ]),
       ),
     );
   }

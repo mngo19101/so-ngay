@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Card;
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../logic.dart';
 import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
@@ -54,6 +55,21 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
   }
 }
 
+String _days(int n) => n >= 60 ? '${(n / 30).round()} tháng' : '$n ngày';
+
+DateTime? _nextDue(List<Card> cards) {
+  DateTime? best;
+  for (final c in cards) {
+    if (c.dueDate.isAfter(store.today) && (best == null || c.dueDate.isBefore(best))) best = c.dueDate;
+  }
+  return best;
+}
+
+String _whenText(DateTime d) {
+  final n = d.difference(store.today).inDays;
+  return n == 1 ? 'ngày mai (${dm(d)})' : 'sau $n ngày (${dm(d)})';
+}
+
 // ---------------- Học ----------------
 class StudyTab extends StatefulWidget {
   final String deckId;
@@ -90,6 +106,11 @@ class _StudyTabState extends State<StudyTab> {
           const Icon(Icons.check_circle_outline_rounded, size: 48, color: C.green),
           const SizedBox(height: 12),
           Text(queue.isEmpty ? 'Không có thẻ nào cần ôn hôm nay' : 'Xong lượt ôn!', style: ts(17, w: FontWeight.w700)),
+          if (_nextDue(all) != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Lượt ôn kế tiếp: ${_whenText(_nextDue(all)!)}', style: ts(14, color: C.muted)),
+            ),
           if (queue.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Đã nhớ $known · Chưa nhớ $unknown', style: ts(14, color: C.muted))),
           const SizedBox(height: 16),
           if (all.isNotEmpty)
@@ -148,7 +169,15 @@ class _StudyTabState extends State<StudyTab> {
           ),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 10),
+      Text(
+        c.dueDate.isAfter(store.today)
+            ? 'Ôn sớm — không đổi lịch ôn (lần tới ${dm(c.dueDate)})'
+            : 'Nhớ → ôn lại sau ${_days(srsSchedule[math.min(c.stage, srsSchedule.length - 1)])} · Chưa nhớ → ngày mai',
+        textAlign: TextAlign.center,
+        style: ts(12, color: C.muted),
+      ),
+      const SizedBox(height: 10),
       Row(children: [
         Expanded(child: BigButton('Chưa nhớ', () => _answer(false), outlined: true, textColor: C.sunday)),
         const SizedBox(width: 12),
@@ -267,7 +296,12 @@ class _AddWordTabState extends State<AddWordTab> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(children: [
                 Expanded(child: Text(c.word, style: ts(15, w: FontWeight.w600))),
-                Text(c.meaning, style: ts(14, color: C.muted)),
+                Flexible(child: Text(c.meaning, overflow: TextOverflow.ellipsis, style: ts(14, color: C.muted))),
+                const SizedBox(width: 10),
+                Text(
+                  c.stage == 0 && c.correctCount == 0 ? 'Mới' : (c.dueDate.isAfter(store.today) ? 'Ôn ${dm(c.dueDate)}' : 'Cần ôn'),
+                  style: ts(12, w: FontWeight.w600, color: c.dueDate.isAfter(store.today) ? C.green : context.accent),
+                ),
               ]),
             ),
           ),

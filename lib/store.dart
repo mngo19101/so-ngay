@@ -375,15 +375,22 @@ class AppStore extends ChangeNotifier {
     }
   }
 
-  /// SM-2 rút gọn. Chưa nhớ: ôn lại sau 1 ngày (hoặc hôm nay nếu [sameDay]).
+  /// Lặp lại ngắt quãng (đường cong quên Ebbinghaus): nhớ đúng thì giãn dần
+  /// 1 → 3 → 7 → 14 → 30 → 60 → 120 → 240 ngày. Quên thì quay về bước đầu.
+  /// Ôn sớm hơn hạn (chưa đến ngày) không làm tăng bước — chỉ tính thống kê.
   void review(Card c, bool known, {bool sameDay = false}) {
     if (known) {
       c.correctCount++;
-      c.intervalDays = c.intervalDays <= 1 ? 3 : (c.intervalDays * c.ease).round();
-      c.ease = math.min(3.0, c.ease + 0.05);
-      c.dueDate = addDays(today, c.intervalDays);
+      final isDue = !c.dueDate.isAfter(today);
+      if (isDue) {
+        c.intervalDays = srsSchedule[math.min(c.stage, srsSchedule.length - 1)];
+        c.stage++;
+        c.ease = math.min(3.0, c.ease + 0.05);
+        c.dueDate = addDays(today, c.intervalDays);
+      }
     } else {
       c.wrongCount++;
+      c.stage = 0;
       c.intervalDays = 1;
       c.ease = math.max(1.3, c.ease - 0.2);
       c.dueDate = sameDay ? today : addDays(today, 1);
