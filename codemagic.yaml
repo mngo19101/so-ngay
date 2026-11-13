@@ -1,0 +1,27 @@
+# Build IPA không ký trên Codemagic (thay cho GitHub Actions khi Actions không chạy được).
+# Trên codemagic.io: chọn repo so-ngay → nhánh cần build → workflow "iOS – IPA không ký" → Start new build.
+workflows:
+  ios-unsigned:
+    name: iOS – IPA không ký
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Tải gói
+        script: flutter pub get
+      - name: Analyze
+        script: flutter analyze --no-fatal-infos
+      - name: Test
+        script: flutter test
+      - name: Build iOS (không ký)
+        script: flutter build ios --release --no-codesign
+      - name: Đóng gói IPA
+        script: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -qry SoNgay-unsigned.ipa Payload
+    artifacts:
+      - SoNgay-unsigned.ipa
