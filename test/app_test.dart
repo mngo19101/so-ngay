@@ -43,7 +43,14 @@ void main() {
     for (final w in ['Regular', 'Bold']) {
       loader.addFont(rootBundle.load('assets/fonts/BeVietnamPro-$w.ttf'));
     }
-    await loader.load();
+    // Nạp font báo "đổi font hệ thống" bất đồng bộ; chạy trong thời gian thực và
+    // chờ thông báo đó tới, rồi pump để khung hình nó đặt không còn treo khi gỡ
+    // cây widget (Flutter 3.50 coi đó là animation còn chạy).
+    await tester.runAsync(() async {
+      await loader.load();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
     await store.load();
     await tester.pumpWidget(const SoNgayApp());
     await tester.pumpAndSettle();
