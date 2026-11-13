@@ -21,6 +21,7 @@ class AppStore extends ChangeNotifier {
   List<StudySession> sessions = [];
   List<NotificationLog> notifLogs = [];
   List<Planned> planned = [];
+  List<Note> notes = [];
   bool loaded = false;
   SharedPreferences? _prefs;
   int _seq = 0;
@@ -58,6 +59,7 @@ class AppStore extends ChangeNotifier {
         'sessions': sessions.map((e) => e.toJson()).toList(),
         'notifLogs': notifLogs.map((e) => e.toJson()).toList(),
         'planned': planned.map((e) => e.toJson()).toList(),
+        'notes': notes.map((e) => e.toJson()).toList(),
       };
 
   List<T> _list<T>(dynamic v, T Function(Map<String, dynamic>) f) =>
@@ -74,6 +76,7 @@ class AppStore extends ChangeNotifier {
     sessions = _list(j['sessions'], StudySession.fromJson);
     notifLogs = _list(j['notifLogs'], NotificationLog.fromJson);
     planned = _list(j['planned'], Planned.fromJson);
+    notes = _list(j['notes'], Note.fromJson);
     if (decks.isEmpty) _seedDecks();
     if (subjects.isEmpty) _seedSubjects();
   }
@@ -644,6 +647,38 @@ class AppStore extends ChangeNotifier {
       d = addDays(d, -1);
     }
     return n;
+  }
+
+  // ---------- ghi chú ----------
+  /// Mới nhất (theo ngày của ghi chú) lên trước; [query] lọc theo tiêu đề và nội dung.
+  List<Note> notesSorted([String query = '']) {
+    final q = query.trim().toLowerCase();
+    final l = notes
+        .where((n) => q.isEmpty || n.title.toLowerCase().contains(q) || n.body.toLowerCase().contains(q))
+        .toList();
+    l.sort((a, b) => b.date.compareTo(a.date));
+    return l;
+  }
+
+  /// Ghi chú trống thì không lưu (và xoá nếu đã có).
+  void saveNote(Note n) {
+    final i = notes.indexWhere((x) => x.id == n.id);
+    if (n.isEmpty) {
+      if (i >= 0) notes.removeAt(i);
+    } else {
+      n.updatedAt = DateTime.now();
+      if (i >= 0) {
+        notes[i] = n;
+      } else {
+        notes.add(n);
+      }
+    }
+    changed();
+  }
+
+  void deleteNote(String id) {
+    notes.removeWhere((n) => n.id == id);
+    changed();
   }
 
   // ---------- sao lưu ----------

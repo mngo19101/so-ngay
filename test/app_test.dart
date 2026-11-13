@@ -315,4 +315,76 @@ void main() {
     expect(card.intervalDays, 1);
     expect(card.stage, 0);
   });
+
+  testWidgets('menu ☰: mở ngăn kéo, chọn tab Ghi chú', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await store.load();
+    nav.go(AppPage.today);
+    await tester.pumpWidget(const SoNgayApp());
+    await tester.pumpAndSettle();
+    expect(find.text('Ghi chú'), findsNothing);
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Thông báo'), findsOneWidget);
+    await tester.tap(find.text('Ghi chú'));
+    await tester.pumpAndSettle();
+    expect(nav.page, AppPage.notes);
+    expect(find.text('Thông báo'), findsNothing); // ngăn kéo đã đóng
+  });
+
+  testWidgets('ghi chú: + tự điền ngày, lưu khi rời trang, sửa và xoá', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await store.load();
+    store.notes.clear();
+    nav.go(AppPage.notes);
+    await tester.pumpWidget(const SoNgayApp());
+    await tester.pumpAndSettle();
+
+    final before = DateTime.now();
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Ghi chú mới'), findsOneWidget);
+    expect(find.textContaining('${before.day}/${before.month}/${before.year}'), findsOneWidget);
+
+    // Quay lại khi chưa viết gì thì không tạo ghi chú trống.
+    await tester.tap(find.byIcon(Icons.chevron_left_rounded));
+    await tester.pumpAndSettle();
+    expect(store.notes, isEmpty);
+
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Đi chợ');
+    await tester.enterText(find.byType(TextField).at(1), 'Sữa, trứng');
+    await tester.tap(find.text('Lưu'));
+    await tester.pumpAndSettle();
+    expect(store.notes.single.title, 'Đi chợ');
+    expect(store.notes.single.body, 'Sữa, trứng');
+    expect(store.notes.single.date.difference(before).inMinutes.abs(), lessThan(2));
+    expect(find.text('Đi chợ'), findsOneWidget);
+
+    await tester.tap(find.text('Đi chợ'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sửa ghi chú'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Đi siêu thị');
+    await tester.tap(find.text('Lưu'));
+    await tester.pumpAndSettle();
+    expect(store.notes.single.title, 'Đi siêu thị');
+
+    await tester.tap(find.text('Đi siêu thị'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Xoá'));
+    await tester.pumpAndSettle();
+    expect(store.notes, isEmpty);
+
+    final n = Note(id: 'x', title: 't', date: DateTime(2026, 1, 2, 3, 4), updatedAt: DateTime(2026));
+    expect(Note.fromJson(n.toJson()).date, DateTime(2026, 1, 2, 3, 4));
+  });
 }

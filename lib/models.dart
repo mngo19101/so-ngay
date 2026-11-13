@@ -279,3 +279,25 @@ class Settings {
     );
   }
 }
+
+class Note {
+  String id, title, body;
+  DateTime date; // ngày giờ của ghi chú: tự điền lúc mở trang, sửa được
+  DateTime updatedAt;
+  Note({required this.id, this.title = '', this.body = '', required this.date, required this.updatedAt});
+  bool get isEmpty => title.trim().isEmpty && body.trim().isEmpty;
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'body': body,
+        'date': date.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+  factory Note.fromJson(Map<String, dynamic> j) => Note(
+        id: j['id'],
+        title: j['title'] ?? '',
+        body: j['body'] ?? '',
+        date: DateTime.parse(j['date']),
+        updatedAt: DateTime.parse(j['updatedAt'] ?? j['date']),
+      );
+}

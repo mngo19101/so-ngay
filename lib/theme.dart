@@ -351,7 +351,29 @@ class StreakBadge extends StatelessWidget {
       );
 }
 
-/// Khung màn hình: chừa lề trái cho thanh bên (đã do Shell lo), cuộn dọc.
+/// Shell gán hàm mở ngăn kéo menu; các màn hình chỉ cần đặt [MenuBtn].
+VoidCallback? openMenu;
+
+class MenuBtn extends StatelessWidget {
+  const MenuBtn({super.key});
+  @override
+  Widget build(BuildContext context) => Tap(
+        label: 'Mở menu',
+        onTap: () => openMenu?.call(),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: C.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: C.border),
+          ),
+          child: Icon(Icons.menu_rounded, size: 22, color: C.ink),
+        ),
+      );
+}
+
+/// Khung màn hình cuộn dọc, toàn chiều rộng.
 class ScreenBody extends StatelessWidget {
   final List<Widget> children;
   final double top;
@@ -369,11 +391,14 @@ class ScreenHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget? trailing;
-  const ScreenHeader(this.title, {super.key, this.subtitle, this.trailing});
+  final Widget? leading; // mặc định là nút ☰
+  const ScreenHeader(this.title, {super.key, this.subtitle, this.trailing, this.leading});
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          leading ?? const MenuBtn(),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, style: ts(26, w: FontWeight.w700, ls: -0.5)),

@@ -74,6 +74,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           },
           child: ScreenBody(top: 12, children: [
             Row(children: [
+              const MenuBtn(),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Tap(
