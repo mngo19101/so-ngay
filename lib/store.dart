@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'logic.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'srs.dart';
 
 const subjectPalette = [0xFF2A78D6, 0xFFEB6834, 0xFF1BAF7A, 0xFFEDA100, 0xFFE87BA4, 0xFF7A4FD1, 0xFF0E9AA7, 0xFF8C6D3F];
 
@@ -529,29 +530,67 @@ class AppStore extends ChangeNotifier {
     }
   }
 
-  /// Lặp lại ngắt quãng (đường cong quên Ebbinghaus): nhớ đúng thì giãn dần
-  /// 1 → 3 → 7 → 14 → 30 → 60 → 120 → 240 ngày. Quên thì quay về bước đầu.
-  /// Ôn sớm hơn hạn (chưa đến ngày) không làm tăng bước — chỉ tính thống kê.
-  void review(Card c, bool known, {bool sameDay = false}) {
-    if (known) {
-      c.correctCount++;
-      final isDue = !c.dueDate.isAfter(today);
-      if (isDue) {
-        c.intervalDays = srsSchedule[math.min(c.stage, srsSchedule.length - 1)];
-        c.stage++;
-        c.ease = math.min(3.0, c.ease + 0.05);
-        c.dueDate = addDays(today, c.intervalDays);
-      }
-    } else {
+  /// Lặp lại ngắt quãng theo FSRS (xem srs.dart). [g]: 1 Quên · 2 Khó · 3 Nhớ · 4 Dễ.
+  /// Quên → từ quay lại ngay trong ngày; nhớ → hẹn lần tới lúc khả năng nhớ còn ~90%.
+  void grade(Card c, int g) {
+    final n = previewGrade(c, g);
+    c.stability = n.s;
+    c.difficulty = n.d;
+    c.intervalDays = n.days;
+    c.dueDate = addDays(today, n.days);
+    c.lastReview = today;
+    if (g == Fsrs.again) {
       c.wrongCount++;
+      if (c.correctCount > 0 || c.stage > 0) c.lapses++;
       c.stage = 0;
-      c.intervalDays = 1;
-      c.ease = math.max(1.3, c.ease - 0.2);
-      c.dueDate = sameDay ? today : addDays(today, 1);
+    } else {
+      c.correctCount++;
+      c.stage++;
     }
-    _log(known);
+    _log(g != Fsrs.again);
     _studyPlanStale = true;
     changed();
+  }
+
+  /// Kết quả nếu chấm [g] cho [c] hôm nay (không thay đổi gì) — để hiện trước khoảng ôn.
+  ({double s, double d, int days}) previewGrade(Card c, int g) {
+    final elapsed = c.stability <= 0 || c.lastReview == null ? null : diffDays(today, c.lastReview!);
+    return Fsrs.next(c.stability, c.difficulty, elapsed, g);
+  }
+
+  void review(Card c, bool known) => grade(c, known ? Fsrs.good : Fsrs.again);
+
+  /// Khả năng nhớ lại [c] hôm nay (0–1). Từ chưa học = 0.
+  double memoryOf(Card c) => c.stability <= 0 || c.lastReview == null
+      ? 0
+      : Fsrs.retrievability(diffDays(today, c.lastReview!).toDouble(), c.stability);
+
+  bool isWeak(Card c) => c.wrongCount > 0 && (c.lapses > 0 || c.wrongCount >= c.correctCount || memoryOf(c) < 0.8);
+
+  /// Chọn từ cho một lượt dò. [source]: 0 thông minh · 1 hay sai · 2 mới thêm · 3 ngẫu nhiên.
+  /// "Thông minh" ưu tiên từ đến hạn, từ sắp quên (khả năng nhớ thấp) rồi từ hay sai.
+  List<Card> quizPick(String deckId, int source, int count, [math.Random? rnd]) {
+    final r = rnd ?? math.Random();
+    var l = deckCards(deckId);
+    switch (source) {
+      case 0:
+        double key(Card c) => (c.dueDate.isAfter(today) ? 1 : 0) + memoryOf(c) - math.min(c.wrongCount, 5) * 0.02;
+        l.shuffle(r);
+        l.sort((a, b) => key(a).compareTo(key(b)));
+      case 1:
+        l = l.where((c) => c.wrongCount > 0).toList()..shuffle(r);
+        l.sort((a, b) {
+          final x = (b.wrongCount - b.correctCount * 0.5).compareTo(a.wrongCount - a.correctCount * 0.5);
+          return x != 0 ? x : memoryOf(a).compareTo(memoryOf(b));
+        });
+      case 2:
+        l = l.reversed.toList();
+      default:
+        l.shuffle(r);
+    }
+    final picked = count <= 0 ? l : l.take(count).toList();
+    // Xen kẽ thứ tự để không đoán được đáp án theo vị trí.
+    return picked..shuffle(r);
   }
 
   // ---------- giờ học ----------

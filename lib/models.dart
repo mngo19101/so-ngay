@@ -131,7 +131,7 @@ class Deck {
   factory Deck.fromJson(Map<String, dynamic> j) => Deck(j['id'], j['name']);
 }
 
-/// Khoảng cách (ngày) giữa các lần ôn theo đường cong quên.
+/// Lịch ôn cố định cũ — nay chỉ dùng để đọc dữ liệu cũ (xem srs.dart).
 const srsSchedule = [1, 3, 7, 14, 30, 60, 120, 240];
 
 class Card {
@@ -140,6 +140,11 @@ class Card {
   DateTime dueDate;
   int intervalDays, correctCount, wrongCount, stage;
   double ease;
+
+  /// FSRS: độ bền trí nhớ (ngày, 0 = chưa ôn lần nào), độ khó 1–10, ngày ôn gần nhất, số lần quên.
+  double stability, difficulty;
+  DateTime? lastReview;
+  int lapses;
   Card({
     required this.id,
     required this.deckId,
@@ -154,6 +159,10 @@ class Card {
     this.correctCount = 0,
     this.wrongCount = 0,
     this.stage = 0,
+    this.stability = 0,
+    this.difficulty = 0,
+    this.lastReview,
+    this.lapses = 0,
   });
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -169,8 +178,13 @@ class Card {
         'correctCount': correctCount,
         'wrongCount': wrongCount,
         'stage': stage,
+        'stability': stability,
+        'difficulty': difficulty,
+        'lastReview': lastReview == null ? null : isoDate(lastReview!),
+        'lapses': lapses,
       };
-  factory Card.fromJson(Map<String, dynamic> j) => Card(
+  factory Card.fromJson(Map<String, dynamic> j) {
+    final c = Card(
         id: j['id'],
         deckId: j['deckId'],
         word: j['word'],
@@ -184,7 +198,18 @@ class Card {
         correctCount: j['correctCount'] ?? 0,
         wrongCount: j['wrongCount'] ?? 0,
         stage: j['stage'] ?? srsSchedule.where((d) => d <= (j['intervalDays'] ?? 0)).length,
-      );
+        stability: (j['stability'] ?? 0).toDouble(),
+        difficulty: (j['difficulty'] ?? 0).toDouble(),
+        lastReview: j['lastReview'] == null ? null : parseDate(j['lastReview']),
+        lapses: j['lapses'] ?? 0);
+    // Dữ liệu từ lịch cũ (1→3→7… ngày): đổi sang FSRS, coi khoảng ôn hiện tại là độ bền.
+    if (!j.containsKey('stability') && c.intervalDays > 0) {
+      c.stability = c.intervalDays.toDouble();
+      c.difficulty = (11 - (c.ease - 1.3) / 1.7 * 6).clamp(1.0, 10.0);
+      c.lastReview = DateTime(c.dueDate.year, c.dueDate.month, c.dueDate.day - c.intervalDays);
+    }
+    return c;
+  }
 }
 
 class StudyLog {

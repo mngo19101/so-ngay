@@ -9,6 +9,7 @@ import 'package:so_ngay/models.dart' as m show Card;
 import 'package:so_ngay/screens/event_sheet.dart';
 import 'package:so_ngay/screens/flashcards.dart';
 import 'package:so_ngay/screens/shell.dart';
+import 'package:so_ngay/srs.dart';
 import 'package:so_ngay/store.dart';
 import 'package:so_ngay/theme.dart';
 
@@ -309,18 +310,54 @@ void main() {
     expect(store.minutesOn(sid, store.today), 60);
     expect(store.streak(), 1);
     final card = store.cards.first;
-    store.review(card, true);
-    expect(card.intervalDays, 1);
+    final t = store.today;
+    store.grade(card, Fsrs.good); // từ mới, nhớ → 3 ngày
+    expect(card.dueDate, addDays(t, 3));
     expect(card.stage, 1);
-    store.review(card, true); // ôn sớm: không đổi lịch
-    expect(card.stage, 1);
-    card.dueDate = store.today;
-    store.review(card, true);
-    expect(card.intervalDays, 3);
-    expect(card.stage, 2);
-    store.review(card, false);
-    expect(card.intervalDays, 1);
+    store.grade(card, Fsrs.good); // ôn lại cùng ngày: không giãn thêm
+    expect(card.dueDate, addDays(t, 3));
+    card.lastReview = addDays(t, -3); // 3 ngày sau, đúng hạn
+    card.dueDate = t;
+    store.grade(card, Fsrs.good);
+    expect(card.intervalDays, greaterThan(8));
+    final s = card.stability;
+    card.lastReview = addDays(t, -card.intervalDays);
+    card.dueDate = t;
+    store.grade(card, Fsrs.again);
+    expect(card.dueDate, t); // quên → ôn lại ngay hôm nay
     expect(card.stage, 0);
+    expect(card.lapses, 1);
+    expect(card.stability, lessThan(s));
+  });
+
+  test('FSRS: ôn đúng hạn liên tục thì khoảng ôn giãn tới hàng năm; "Khó" ngắn hơn "Nhớ", "Dễ" dài hơn', () {
+    var s = 0.0, d = 0.0;
+    int? elapsed;
+    final gaps = <int>[];
+    for (var i = 0; i < 6; i++) {
+      final n = Fsrs.next(s, d, elapsed, Fsrs.good);
+      s = n.s;
+      d = n.d;
+      elapsed = n.days;
+      gaps.add(n.days);
+    }
+    for (var i = 1; i < gaps.length; i++) {
+      expect(gaps[i], greaterThan(gaps[i - 1]));
+    }
+    expect(gaps.last, greaterThan(365));
+    final hard = Fsrs.next(10, 5, 10, Fsrs.hard).days;
+    final good = Fsrs.next(10, 5, 10, Fsrs.good).days;
+    final easy = Fsrs.next(10, 5, 10, Fsrs.easy).days;
+    expect(hard, lessThan(good));
+    expect(easy, greaterThan(good));
+    expect(Fsrs.next(10, 5, 10, Fsrs.again).days, 0);
+    // Dữ liệu lịch cũ được chuyển sang FSRS.
+    final old = m.Card.fromJson({
+      'id': 'x', 'deckId': 'd', 'word': 'a', 'meaning': 'b', 'dueDate': '2026-11-28', 'intervalDays': 7, 'ease': 2.5,
+    });
+    expect(old.stability, 7);
+    expect(old.lastReview, DateTime(2026, 11, 21));
+    expect(alignTyped('remeber', 'remember').where((x) => !x.$2).map((x) => x.$1), ['_']);
   });
 
   testWidgets('menu ☰: mở ngăn kéo, chọn tab Ghi chú', (tester) async {
@@ -488,5 +525,100 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Thuật ngữ ML'), findsNothing);
     expect(find.textContaining('Bộ IELTS 7.0'), findsOneWidget);
+  });
+
+  testWidgets('học: lật thẻ rồi tự chấm 4 mức, quên thì ôn lại cuối lượt', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await store.load();
+    store.decks
+      ..clear()
+      ..add(Deck('d1', 'IELTS'));
+    store.cards.clear();
+    store.addCard('d1', 'apple', 'quả táo');
+    store.addCard('d1', 'book', 'quyển sách');
+    nav.go(AppPage.cards);
+    await tester.pumpWidget(const SoNgayApp());
+    await tester.pumpAndSettle();
+    expect(find.text('Thẻ 1 / 2'), findsOneWidget);
+    expect(find.text('Nhớ'), findsNothing);
+    await tester.tap(find.text('Lật thẻ'));
+    await tester.pumpAndSettle();
+    expect(find.text('ôn lại ngay'), findsOneWidget);
+    expect(find.text('3 ngày'), findsOneWidget);
+    expect(find.text('16 ngày'), findsOneWidget);
+    await tester.tap(find.text('Quên'));
+    await tester.pumpAndSettle();
+    expect(find.text('Thẻ 2 / 3'), findsOneWidget);
+    await tester.tap(find.text('Lật thẻ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nhớ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lật thẻ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nhớ'));
+    await tester.pumpAndSettle();
+    expect(find.text('Xong lượt ôn!'), findsOneWidget);
+    expect(find.text('Nhớ 2 · Quên 1'), findsOneWidget);
+    expect(store.cards.every((c) => c.dueDate.isAfter(store.today)), isTrue);
+  });
+
+  testWidgets('dò lại: sai thì hỏi lại cuối lượt, Enter để chấm/sang câu, kết quả liệt kê từ sai', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await store.load();
+    store.decks
+      ..clear()
+      ..add(Deck('d1', 'IELTS'));
+    store.cards.clear();
+    for (final w in [('apple', 'quả táo'), ('book', 'quyển sách'), ('water', 'nước'), ('journey', 'hành trình')]) {
+      store.addCard('d1', w.$1, w.$2, pos: 'noun');
+    }
+    nav.go(AppPage.cards);
+    await tester.pumpWidget(const SoNgayApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dò lại'));
+    await tester.pumpAndSettle();
+    expect(find.text('Thông minh'), findsOneWidget);
+    await tester.tap(find.text('Việt → Anh'));
+    await tester.pumpAndSettle();
+
+    m.Card shown() => store.cards.firstWhere((c) => find.text(c.meaning).evaluate().isNotEmpty);
+    Future<void> submit(String text) async {
+      await tester.enterText(find.byType(TextField), text);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+    }
+
+    final first = shown();
+    await submit('zzz');
+    expect(find.text('Chưa đúng'), findsOneWidget);
+    expect(find.text('Câu 1 / 5'), findsOneWidget); // câu sai được thêm vào cuối
+    expect(first.dueDate, store.today);
+    await tester.testTextInput.receiveAction(TextInputAction.done); // Enter → câu tiếp
+    await tester.pump();
+    expect(find.text('Câu 2 / 5'), findsOneWidget);
+
+    await submit(shown().word);
+    expect(find.text('Chính xác!'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1400)); // đúng thì tự sang câu
+    expect(find.text('Câu 3 / 5'), findsOneWidget);
+
+    while (find.text('đúng ngay lần đầu').evaluate().isEmpty) {
+      await submit(shown().word);
+      await tester.pump(const Duration(milliseconds: 1400));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 4'), findsOneWidget);
+    expect(find.text('TỪ CẦN ÔN THÊM · 1'), findsOneWidget);
+    await tester.ensureVisible(find.text('Ôn lại 1 từ sai'));
+    await tester.tap(find.text('Ôn lại 1 từ sai'));
+    await tester.pumpAndSettle();
+    expect(find.text('Câu 1 / 1'), findsOneWidget);
+    expect(find.text(first.meaning), findsOneWidget);
   });
 }
