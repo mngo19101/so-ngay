@@ -66,7 +66,7 @@ class _StudyInputScreenState extends State<StudyInputScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Padding(padding: const EdgeInsets.all(16), child: Text(s.name, style: ts(17, w: FontWeight.w700))),
           ListTile(leading: const Icon(Icons.edit_outlined), title: Text('Đổi tên', style: ts(15)), onTap: () => Navigator.pop(c, 'rename')),
-          ListTile(leading: const Icon(Icons.delete_outline_rounded, color: C.sunday), title: Text('Xoá môn', style: ts(15, color: C.sunday)), onTap: () => Navigator.pop(c, 'delete')),
+          ListTile(leading: Icon(Icons.delete_outline_rounded, color: C.sunday), title: Text('Xoá môn', style: ts(15, color: C.sunday)), onTap: () => Navigator.pop(c, 'delete')),
         ]),
       ),
     );
@@ -184,7 +184,7 @@ class _StudyInputScreenState extends State<StudyInputScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.check_circle_rounded, size: 18, color: C.green),
+                    Icon(Icons.check_circle_rounded, size: 18, color: C.green),
                     const SizedBox(width: 6),
                     Text(saved!, style: ts(14, w: FontWeight.w600, color: C.successText)),
                   ]),
@@ -301,10 +301,10 @@ class _CalendarPopupState extends State<_CalendarPopup> {
                         child: Container(
                           height: 40,
                           margin: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(color: sel ? C.ink : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+                          decoration: BoxDecoration(color: sel ? C.fill : Colors.transparent, borderRadius: BorderRadius.circular(12)),
                           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                             Text('${d.day}', style: ts(14, w: FontWeight.w600, color: sel ? Colors.white : C.ink)),
-                            SizedBox(height: 6, child: has ? Container(width: 5, height: 5, decoration: const BoxDecoration(color: C.green, shape: BoxShape.circle)) : null),
+                            SizedBox(height: 6, child: has ? Container(width: 5, height: 5, decoration: BoxDecoration(color: C.green, shape: BoxShape.circle)) : null),
                           ]),
                         ),
                       ),

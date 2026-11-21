@@ -82,6 +82,31 @@ bool occursOn(SpecialDay sd, DateTime d) {
   return n != null && n == dateOnly(d);
 }
 
+/// Sự kiện có diễn ra vào ngày [d] không (tính cả chuỗi lặp).
+bool eventOccursOn(Event e, DateTime d) {
+  d = dateOnly(d);
+  final first = dateOnly(e.start);
+  if (d.isBefore(first)) return false;
+  if (!e.repeats) return d == first;
+  if (e.repeatUntil != null && d.isAfter(dateOnly(e.repeatUntil!))) return false;
+  if (e.skipDates.contains(isoDate(d))) return false;
+  if (e.repeat == 'weekly') {
+    final days = e.repeatWeekdays.isEmpty ? [first.weekday] : e.repeatWeekdays;
+    return days.contains(d.weekday);
+  }
+  return true;
+}
+
+/// Tối đa [max] lần diễn ra đầu tiên kể từ [from], dò trong vòng 2 năm.
+List<DateTime> eventOccurrencesFrom(Event e, DateTime from, int max) {
+  final out = <DateTime>[];
+  for (var i = 0; i < 730 && out.length < max; i++) {
+    final d = addDays(from, i);
+    if (eventOccursOn(e, d)) out.add(d);
+  }
+  return out;
+}
+
 class SpecialOcc {
   final SpecialDay sd;
   final DateTime date;

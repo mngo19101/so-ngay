@@ -5,6 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import '../logic.dart';
 import '../models.dart';
+import '../srs.dart';
 import '../store.dart';
 import '../theme.dart';
 
@@ -41,6 +42,10 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 final n = await promptText(context, 'Tên bộ thẻ mới', hint: 'Ví dụ: TOEIC');
                 if (n != null && n.trim().isNotEmpty) setState(() => deckId = store.addDeck(n).id);
               }),
+              const SizedBox(width: 8),
+              Pill('Quản lý bộ',
+                  dashed: true,
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeckManagerScreen()))),
             ]),
           ),
           const SizedBox(height: 14),
@@ -55,7 +60,108 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
   }
 }
 
-String _days(int n) => n >= 60 ? '${(n / 30).round()} tháng' : '$n ngày';
+/// Danh sách mọi bộ thẻ: đổi tên, xoá (kèm thẻ trong bộ), thêm bộ mới.
+class DeckManagerScreen extends StatelessWidget {
+  const DeckManagerScreen({super.key});
+
+  Future<void> _rename(BuildContext context, Deck d) async {
+    final n = await promptText(context, 'Đổi tên bộ', initial: d.name);
+    if (n == null || !context.mounted || n.trim() == d.name) return;
+    if (n.trim().isEmpty) {
+      toast(context, 'Tên bộ không được để trống');
+    } else if (!store.renameDeck(d.id, n)) {
+      toast(context, 'Đã có bộ tên "${n.trim()}"');
+    }
+  }
+
+  Future<void> _delete(BuildContext context, Deck d) async {
+    final count = store.deckCards(d.id).length;
+    final ok = await confirm(
+      context,
+      'Xoá bộ "${d.name}"?',
+      count == 0 ? 'Bộ này chưa có từ nào.' : '$count từ trong bộ cũng sẽ bị xoá. Không thể hoàn tác.',
+    );
+    if (!ok || !context.mounted) return;
+    if (store.deleteDeck(d.id)) toast(context, 'Đã xoá bộ ${d.name}');
+  }
+
+  Widget _action(IconData icon, String label, VoidCallback? onTap, Color bg, Color fg) => Tap(
+        label: label,
+        onTap: onTap,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(color: onTap == null ? C.bg : bg, shape: BoxShape.circle),
+          child: Icon(icon, size: 20, color: onTap == null ? C.borderInput : fg),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListenableBuilder(
+          listenable: store,
+          builder: (context, _) {
+            final canDelete = store.decks.length > 1;
+            return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 40), children: [
+              Row(children: [
+                IconBtn(Icons.chevron_left_rounded, 'Quay lại', () => Navigator.pop(context)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Quản lý bộ', style: ts(22, w: FontWeight.w700, ls: -0.3)),
+                    Text('${store.decks.length} bộ', style: ts(13, color: C.muted)),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              for (final d in store.decks)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Box(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: ts(15, w: FontWeight.w700)),
+                          const SizedBox(height: 2),
+                          Text('${store.deckCards(d.id).length} từ', style: ts(12, color: C.muted)),
+                        ]),
+                      ),
+                      _action(Icons.edit_outlined, 'Đổi tên bộ ${d.name}', () => _rename(context, d), C.segmentBg, C.ink),
+                      const SizedBox(width: 8),
+                      _action(Icons.delete_outline_rounded, 'Xoá bộ ${d.name}', canDelete ? () => _delete(context, d) : null,
+                          C.errorBg, C.errorText),
+                    ]),
+                  ),
+                ),
+              if (!canDelete)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+                  child: Text('Cần giữ lại ít nhất một bộ.', style: ts(12, color: C.muted)),
+                ),
+              const SizedBox(height: 6),
+              BigButton('+ Bộ mới', () async {
+                final n = await promptText(context, 'Tên bộ thẻ mới', hint: 'Ví dụ: TOEIC');
+                if (n != null && n.trim().isNotEmpty) store.addDeck(n);
+              }, outlined: true, textColor: C.ink),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Khoảng ôn dễ đọc: 3 ngày · 2 tháng · 1,5 năm.
+String _ivl(int n) {
+  if (n <= 0) return 'hôm nay';
+  if (n < 30) return '$n ngày';
+  if (n < 365) return '${(n / 30).round()} tháng';
+  final y = n / 365;
+  return '${y < 2 ? y.toStringAsFixed(1).replaceAll('.', ',') : y.round()} năm';
+}
 
 DateTime? _nextDue(List<Card> cards) {
   DateTime? best;
@@ -70,6 +176,37 @@ String _whenText(DateTime d) {
   return n == 1 ? 'ngày mai (${dm(d)})' : 'sau $n ngày (${dm(d)})';
 }
 
+/// Độ nhớ trung bình (0–1) của các từ đã học; null nếu chưa học từ nào.
+double? _avgMemory(List<Card> cards) {
+  final l = cards.where((c) => c.stability > 0).toList();
+  if (l.isEmpty) return null;
+  return l.map(store.memoryOf).reduce((a, b) => a + b) / l.length;
+}
+
+FlutterTts? _ttsInst;
+
+/// Đọc phát âm tiếng Anh (bỏ qua lỗi nếu máy không hỗ trợ).
+Future<void> speakWord(String text, {double rate = 0.9}) async {
+  try {
+    if (_ttsInst == null) {
+      final t = FlutterTts();
+      await t.setLanguage('en-US');
+      await t.setSharedInstance(true);
+      await t.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback, [IosTextToSpeechAudioCategoryOptions.defaultToSpeaker]);
+      _ttsInst = t;
+    }
+    await _ttsInst!.setSpeechRate(rate * 0.5);
+    await _ttsInst!.speak(text);
+  } catch (_) {}
+}
+
+Future<void> stopSpeaking() async {
+  try {
+    await _ttsInst?.stop();
+  } catch (_) {}
+}
+
 // ---------------- Học ----------------
 class StudyTab extends StatefulWidget {
   final String deckId;
@@ -80,16 +217,21 @@ class StudyTab extends StatefulWidget {
 
 class _StudyTabState extends State<StudyTab> {
   late List<Card> queue = store.dueCards(widget.deckId);
+  final Map<String, int> _again = {};
   int i = 0, known = 0, unknown = 0;
   bool flipped = false;
 
-  void _answer(bool k) {
-    store.review(queue[i], k);
+  void _answer(int g) {
+    final c = queue[i];
+    store.grade(c, g);
     setState(() {
-      if (k) {
-        known++;
-      } else {
+      if (g == Fsrs.again) {
         unknown++;
+        // Quên thì ôn lại ngay cuối lượt cho tới khi nhớ (tối đa 3 lần mỗi từ).
+        final n = _again[c.id] = (_again[c.id] ?? 0) + 1;
+        if (n <= 3) queue.add(c);
+      } else {
+        known++;
       }
       i++;
       flipped = false;
@@ -100,10 +242,11 @@ class _StudyTabState extends State<StudyTab> {
   Widget build(BuildContext context) {
     if (queue.isEmpty || i >= queue.length) {
       final all = store.deckCards(widget.deckId);
+      final avg = _avgMemory(all);
       return Box(
         padding: const EdgeInsets.all(24),
         child: Column(children: [
-          const Icon(Icons.check_circle_outline_rounded, size: 48, color: C.green),
+          Icon(Icons.check_circle_outline_rounded, size: 48, color: C.green),
           const SizedBox(height: 12),
           Text(queue.isEmpty ? 'Không có thẻ nào cần ôn hôm nay' : 'Xong lượt ôn!', style: ts(17, w: FontWeight.w700)),
           if (_nextDue(all) != null)
@@ -111,12 +254,18 @@ class _StudyTabState extends State<StudyTab> {
               padding: const EdgeInsets.only(top: 6),
               child: Text('Lượt ôn kế tiếp: ${_whenText(_nextDue(all)!)}', style: ts(14, color: C.muted)),
             ),
-          if (queue.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Đã nhớ $known · Chưa nhớ $unknown', style: ts(14, color: C.muted))),
+          if (queue.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Nhớ $known · Quên $unknown', style: ts(14, color: C.muted))),
+          if (avg != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Độ nhớ trung bình của bộ: ${(avg * 100).round()}%', style: ts(14, color: C.muted)),
+            ),
           const SizedBox(height: 16),
           if (all.isNotEmpty)
             BigButton('Ôn lại toàn bộ bộ thẻ', () {
               setState(() {
                 queue = [...all]..shuffle();
+                _again.clear();
                 i = 0;
                 known = 0;
                 unknown = 0;
@@ -136,9 +285,9 @@ class _StudyTabState extends State<StudyTab> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerRight,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('Đã nhớ $known', style: ts(13, w: FontWeight.w600, color: C.green)),
+              Text('Nhớ $known', style: ts(13, w: FontWeight.w600, color: C.green)),
               const SizedBox(width: 12),
-              Text('Chưa nhớ $unknown', style: ts(13, w: FontWeight.w600, color: C.sunday)),
+              Text('Quên $unknown', style: ts(13, w: FontWeight.w600, color: C.sunday)),
             ]),
           ),
         ),
@@ -161,7 +310,7 @@ class _StudyTabState extends State<StudyTab> {
             height: 300,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: flipped ? C.ink : C.surface,
+              color: flipped ? C.fill : C.surface,
               borderRadius: BorderRadius.circular(26),
               border: flipped ? null : Border.all(color: C.border),
             ),
@@ -170,20 +319,43 @@ class _StudyTabState extends State<StudyTab> {
         ),
       ),
       const SizedBox(height: 10),
-      Text(
-        c.dueDate.isAfter(store.today)
-            ? 'Ôn sớm — không đổi lịch ôn (lần tới ${dm(c.dueDate)})'
-            : 'Nhớ → ôn lại sau ${_days(srsSchedule[math.min(c.stage, srsSchedule.length - 1)])} · Chưa nhớ → ngày mai',
-        textAlign: TextAlign.center,
-        style: ts(12, color: C.muted),
-      ),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(child: BigButton('Chưa nhớ', () => _answer(false), outlined: true, textColor: C.sunday)),
-        const SizedBox(width: 12),
-        Expanded(child: BigButton('Đã nhớ', () => _answer(true), color: C.green)),
-      ]),
+      if (!flipped) ...[
+        Text('Nhớ lại nghĩa trong đầu trước, rồi lật thẻ và tự chấm', textAlign: TextAlign.center, style: ts(12, color: C.muted)),
+        const SizedBox(height: 10),
+        BigButton('Lật thẻ', () => setState(() => flipped = true), color: context.accent),
+      ] else ...[
+        Text('Bạn nhớ từ này thế nào? Số bên dưới là lần ôn tới', textAlign: TextAlign.center, style: ts(12, color: C.muted)),
+        const SizedBox(height: 10),
+        Row(children: [
+          _rate(c, 'Quên', Fsrs.again, C.errorBg, C.errorText),
+          const SizedBox(width: 8),
+          _rate(c, 'Khó', Fsrs.hard, C.streakBg, C.streakText),
+          const SizedBox(width: 8),
+          _rate(c, 'Nhớ', Fsrs.good, C.successBg, C.successText),
+          const SizedBox(width: 8),
+          _rate(c, 'Dễ', Fsrs.easy, context.accentSoft, context.accent),
+        ]),
+      ],
     ]);
+  }
+
+  Widget _rate(Card c, String label, int g, Color bg, Color fg) {
+    final when = g == Fsrs.again ? 'ôn lại ngay' : _ivl(store.previewGrade(c, g).days);
+    return Expanded(
+      child: Tap(
+        label: '$label, $when',
+        onTap: () => _answer(g),
+        child: Container(
+          height: 60,
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(label, style: ts(15, w: FontWeight.w700, color: fg)),
+            const SizedBox(height: 2),
+            FittedBox(fit: BoxFit.scaleDown, child: Text(when, style: ts(12, color: fg))),
+          ]),
+        ),
+      ),
+    );
   }
 
   Widget _front(Card c) => Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -191,7 +363,13 @@ class _StudyTabState extends State<StudyTab> {
         const SizedBox(height: 8),
         Text(c.word, textAlign: TextAlign.center, style: ts(38, w: FontWeight.w700, ls: -0.5)),
         if (c.ipa != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(c.ipa!, style: ts(17, color: C.muted))),
-        const SizedBox(height: 28),
+        const SizedBox(height: 12),
+        Tap(
+          label: 'Nghe ${c.word}',
+          onTap: () => speakWord(c.word),
+          child: Padding(padding: const EdgeInsets.all(8), child: Icon(Icons.volume_up_rounded, size: 26, color: context.accent)),
+        ),
+        const SizedBox(height: 8),
         Text('Chạm để lật thẻ', style: ts(13, color: C.muted)),
       ]);
 
@@ -297,7 +475,7 @@ class _AddWordTabState extends State<AddWordTab> {
                 Text('$total từ · tìm kiếm và xoá', style: ts(13, color: C.muted)),
               ]),
             ),
-            const Icon(Icons.chevron_right_rounded, color: C.muted),
+            Icon(Icons.chevron_right_rounded, color: C.muted),
           ]),
         ),
       ),
@@ -363,12 +541,12 @@ class _VocabBankScreenState extends State<VocabBankScreen> {
                   textInputAction: TextInputAction.search,
                   onChanged: (_) => setState(() {}),
                   decoration: inputDeco('Tìm từ hoặc nghĩa').copyWith(
-                    prefixIcon: const Icon(Icons.search_rounded, color: C.muted),
+                    prefixIcon: Icon(Icons.search_rounded, color: C.muted),
                     suffixIcon: q.isEmpty
                         ? null
                         : IconButton(
                             tooltip: 'Xoá nội dung tìm',
-                            icon: const Icon(Icons.close_rounded, color: C.muted),
+                            icon: Icon(Icons.close_rounded, color: C.muted),
                             onPressed: () => setState(search.clear),
                           ),
                   ),
@@ -400,7 +578,7 @@ class _VocabBankScreenState extends State<VocabBankScreen> {
 
   Widget _row(BuildContext context, Card c) {
     final later = c.dueDate.isAfter(store.today);
-    final status = c.stage == 0 && c.correctCount == 0 ? 'Mới' : (later ? 'Ôn ${dm(c.dueDate)}' : 'Cần ôn');
+    final status = c.stability <= 0 ? 'Mới' : (later ? 'Ôn ${dm(c.dueDate)}' : 'Cần ôn');
     return Padding(
       key: ValueKey(c.id),
       padding: const EdgeInsets.only(bottom: 8),
@@ -415,7 +593,10 @@ class _VocabBankScreenState extends State<VocabBankScreen> {
             ]),
           ),
           const SizedBox(width: 10),
-          Text(status, style: ts(12, w: FontWeight.w600, color: later ? C.green : context.accent)),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(status, style: ts(12, w: FontWeight.w600, color: later ? C.green : context.accent)),
+            if (c.stability > 0) Text('nhớ ${(store.memoryOf(c) * 100).round()}%', style: ts(11, color: C.muted)),
+          ]),
           IconBtn(Icons.delete_outline_rounded, 'Xoá ${c.word}', () => _delete(c), bordered: false),
         ]),
       ),
@@ -433,6 +614,9 @@ const _modeInfo = {
   QuizMode.listenType: ('Nghe viết từ', 'Nghe rồi gõ lại', Icons.keyboard_alt_outlined),
 };
 
+const _sources = ['Thông minh', 'Hay sai', 'Mới thêm', 'Ngẫu nhiên'];
+const _counts = [10, 20, 0];
+
 int levenshtein(String a, String b) {
   if (a == b) return 0;
   var prev = List<int>.generate(b.length + 1, (i) => i);
@@ -448,7 +632,59 @@ int levenshtein(String a, String b) {
   return prev[b.length];
 }
 
+/// So từ gõ [typed] với đáp án [answer]: trả về từng ký tự đã gõ kèm đúng/sai,
+/// chữ bị thiếu hiện bằng '_' (căn theo khoảng cách sửa ít nhất).
+List<(String, bool)> alignTyped(String typed, String answer) {
+  final a = typed.trim(), b = answer.trim();
+  bool eq(int i, int j) => a[i].toLowerCase() == b[j].toLowerCase();
+  final d = List.generate(a.length + 1, (i) => List<int>.filled(b.length + 1, 0));
+  for (var i = 0; i <= a.length; i++) {
+    d[i][0] = i;
+  }
+  for (var j = 0; j <= b.length; j++) {
+    d[0][j] = j;
+  }
+  for (var i = 1; i <= a.length; i++) {
+    for (var j = 1; j <= b.length; j++) {
+      d[i][j] = math.min(math.min(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + (eq(i - 1, j - 1) ? 0 : 1));
+    }
+  }
+  final out = <(String, bool)>[];
+  var i = a.length, j = b.length;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && d[i][j] == d[i - 1][j - 1] + (eq(i - 1, j - 1) ? 0 : 1)) {
+      out.add((a[i - 1], eq(i - 1, j - 1)));
+      i--;
+      j--;
+    } else if (i > 0 && d[i][j] == d[i - 1][j] + 1) {
+      out.add((a[i - 1], false));
+      i--;
+    } else {
+      out.add(('_', false));
+      j--;
+    }
+  }
+  return out.reversed.toList();
+}
+
 String _norm(String s) => s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+/// Mẫu gợi ý: hiện [shown] chữ cái đầu, còn lại là '_' ('/' cho dấu cách).
+String _pattern(String w, int shown) {
+  var k = 0;
+  return w.split('').map((ch) {
+    if (ch == ' ') return '/';
+    k++;
+    return k <= shown ? ch : '_';
+  }).join(' ');
+}
+
+class _Q {
+  final Card c;
+  final QuizMode m;
+  final bool retry;
+  _Q(this.c, this.m, {this.retry = false});
+}
 
 class QuizTab extends StatefulWidget {
   final String deckId;
@@ -458,107 +694,156 @@ class QuizTab extends StatefulWidget {
 }
 
 class _QuizTabState extends State<QuizTab> {
-  QuizMode? mode;
-  List<Card> qs = [];
+  bool started = false, finished = false, mixed = false;
+  QuizMode mode = QuizMode.viEn;
+  int source = 0, count = 10;
+  List<_Q> qs = [];
   List<String> options = [];
-  int q = 0, score = 0, streak = 0;
-  bool answered = false, lastOk = false, near = false, finished = false;
+  final List<Card> missed = [];
+  final Map<String, int> _retries = {};
+  int q = 0, score = 0, streak = 0, bestStreak = 0, hints = 0, _session = 0;
+  bool answered = false, lastOk = false, near = false;
   String? picked;
+  String typed = '';
   final input = TextEditingController();
+  final focus = FocusNode();
   final rnd = math.Random();
-  FlutterTts? _tts;
 
-  bool get _choice => mode == QuizMode.enVi || mode == QuizMode.listenPick;
-  bool get _listen => mode == QuizMode.listenPick || mode == QuizMode.listenType;
-
-  Future<void> _speak(String text, {double rate = 0.9}) async {
-    try {
-      if (_tts == null) {
-        _tts = FlutterTts();
-        await _tts!.setLanguage('en-US');
-        await _tts!.setSharedInstance(true);
-        await _tts!.setIosAudioCategory(
-            IosTextToSpeechAudioCategory.playback, [IosTextToSpeechAudioCategoryOptions.defaultToSpeaker]);
-      }
-      await _tts!.setSpeechRate(rate * 0.5 + (rate > 0.7 ? 0 : 0));
-      await _tts!.speak(text);
-    } catch (_) {}
-  }
+  _Q get cur => qs[q];
+  bool get _choice => cur.m == QuizMode.enVi || cur.m == QuizMode.listenPick;
+  bool get _listen => cur.m == QuizMode.listenPick || cur.m == QuizMode.listenType;
 
   @override
   void dispose() {
-    _tts?.stop();
+    stopSpeaking();
+    input.dispose();
+    focus.dispose();
     super.dispose();
   }
 
-  void _start(QuizMode m) {
-    final pool = store.deckCards(widget.deckId);
-    final need = (m == QuizMode.enVi || m == QuizMode.listenPick) ? 2 : 1;
-    if (pool.length < need) {
-      toast(context, 'Bộ thẻ cần ít nhất $need từ cho trò này');
+  void _start({QuizMode? m, bool mix = false, List<Card>? only}) {
+    final deckSize = store.deckCards(widget.deckId).length;
+    if (deckSize == 0) {
+      toast(context, 'Bộ thẻ chưa có từ nào');
       return;
     }
-    pool.shuffle(rnd);
+    if (!mix && (m == QuizMode.enVi || m == QuizMode.listenPick) && deckSize < 2) {
+      toast(context, 'Bộ thẻ cần ít nhất 2 từ cho trò này');
+      return;
+    }
+    final pool = only ?? store.quizPick(widget.deckId, source, count, rnd);
+    if (pool.isEmpty) {
+      toast(context, 'Chưa có từ nào làm sai — thử "Thông minh" nhé');
+      return;
+    }
+    final modes = deckSize < 2 ? const [QuizMode.viEn, QuizMode.listenType] : QuizMode.values;
     setState(() {
-      mode = m;
-      qs = pool.take(math.min(10, pool.length)).toList();
+      mixed = mix;
+      if (m != null) mode = m;
+      qs = [for (final c in pool) _Q(c, mix ? modes[rnd.nextInt(modes.length)] : mode)];
+      missed.clear();
+      _retries.clear();
       q = 0;
       score = 0;
       streak = 0;
+      bestStreak = 0;
+      _session++;
+      started = true;
       finished = false;
     });
     _prepare();
   }
 
-  void _prepare() {
-    final c = qs[q];
-    input.clear();
-    answered = false;
-    picked = null;
-    options = [];
-    if (_choice) {
-      final others = store.deckCards(widget.deckId).where((x) => x.id != c.id).toList()..shuffle(rnd);
-      final list = [
-        mode == QuizMode.enVi ? c.meaning : c.word,
-        ...others.take(3).map((x) => mode == QuizMode.enVi ? x.meaning : x.word),
-      ]..shuffle(rnd);
-      options = list;
-    }
-    setState(() {});
-    if (_listen) _speak(c.word);
+  void _quit() {
+    focus.unfocus();
+    setState(() {
+      _session++;
+      started = false;
+    });
   }
 
-  void _check() {
-    final c = qs[q];
-    bool ok;
-    var nearMiss = false;
+  void _prepare() {
+    final c = cur.c;
+    input.clear();
+    typed = '';
+    answered = false;
+    picked = null;
+    near = false;
+    hints = 0;
+    options = [];
     if (_choice) {
-      final correct = mode == QuizMode.enVi ? c.meaning : c.word;
-      ok = picked == correct;
+      String val(Card x) => cur.m == QuizMode.enVi ? x.meaning : x.word;
+      final right = val(c);
+      final others = store.deckCards(widget.deckId).where((x) => x.id != c.id).toList()..shuffle(rnd);
+      // Ưu tiên đáp án nhiễu cùng từ loại: phải nhớ thật, không đoán mò được.
+      final ordered = [
+        ...others.where((x) => x.partOfSpeech == c.partOfSpeech),
+        ...others.where((x) => x.partOfSpeech != c.partOfSpeech),
+      ];
+      final seen = {_norm(right)};
+      final list = [right];
+      for (final o in ordered) {
+        if (list.length >= 4) break;
+        if (seen.add(_norm(val(o)))) list.add(val(o));
+      }
+      options = list..shuffle(rnd);
+    }
+    setState(() {});
+    if (_listen) speakWord(c.word);
+    if (!_choice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && started && !finished) focus.requestFocus();
+      });
+    }
+  }
+
+  void _check({bool giveUp = false}) {
+    if (answered) return;
+    final c = cur.c;
+    var ok = false, nearMiss = false;
+    if (giveUp) {
+      ok = false;
+    } else if (_choice) {
+      ok = picked == (cur.m == QuizMode.enVi ? c.meaning : c.word);
     } else {
+      typed = input.text;
       final a = _norm(input.text), b = _norm(c.word);
       ok = a == b;
-      if (!ok && mode == QuizMode.viEn && a.isNotEmpty && levenshtein(a, b) <= 1) {
+      // Sai một chữ ở từ dài vẫn tính đúng nhưng chấm "Khó"; từ ngắn phải đúng hẳn.
+      if (!ok && b.length >= 5 && a.isNotEmpty && levenshtein(a, b) <= 1) {
         ok = true;
         nearMiss = true;
       }
     }
-    store.review(c, ok, sameDay: true);
+    store.grade(c, !ok ? Fsrs.again : (nearMiss || hints > 0 ? Fsrs.hard : Fsrs.good));
     setState(() {
       answered = true;
       lastOk = ok;
       near = nearMiss;
       if (ok) {
-        score++;
+        if (!cur.retry) score++;
         streak++;
+        bestStreak = math.max(bestStreak, streak);
       } else {
         streak = 0;
+        if (!missed.any((x) => x.id == c.id)) missed.add(c);
+        // Sai thì hỏi lại ở cuối lượt (tối đa 2 lần) — nhớ lại ngay khi vừa quên giúp nhớ lâu hơn.
+        final n = _retries[c.id] = (_retries[c.id] ?? 0) + 1;
+        if (n <= 2) qs.add(_Q(c, cur.m, retry: true));
       }
     });
+    speakWord(c.word);
+    if (ok) {
+      final s = _session, at = q;
+      Future.delayed(Duration(milliseconds: _choice ? 900 : 1300), () {
+        if (mounted && _session == s && q == at && answered && !finished) _next();
+      });
+    }
   }
 
   void _next() {
     if (q + 1 >= qs.length) {
+      focus.unfocus();
       setState(() => finished = true);
       return;
     }
@@ -566,35 +851,42 @@ class _QuizTabState extends State<QuizTab> {
     _prepare();
   }
 
+  void _hint() {
+    if (answered || hints >= cur.c.word.replaceAll(' ', '').length - 1) return;
+    setState(() => hints++);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (mode == null) return _menu();
-    if (finished) {
-      return Box(
-        padding: const EdgeInsets.all(24),
-        child: Column(children: [
-          Text('$score / ${qs.length}', style: ts(44, w: FontWeight.w700)),
-          Text('câu đúng', style: ts(14, color: C.muted)),
-          const SizedBox(height: 20),
-          BigButton('Chơi lại', () => _start(mode!), color: context.accent),
-          const SizedBox(height: 10),
-          BigButton('Chọn trò khác', () => setState(() => mode = null), outlined: true, textColor: C.ink),
-        ]),
-      );
-    }
-    final c = qs[q];
-    final canCheck = _choice ? picked != null : input.text.trim().isNotEmpty;
+    if (!started) return _menu();
+    if (finished) return _result();
+    final c = cur.c;
+    final canCheck = input.text.trim().isNotEmpty;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Tap(
           label: 'Chọn trò khác',
-          onTap: () => setState(() => mode = null),
+          onTap: _quit,
           child: const Padding(padding: EdgeInsets.only(right: 10), child: Icon(Icons.arrow_back_rounded, size: 22)),
         ),
         Text('Câu ${q + 1} / ${qs.length}', style: ts(14, w: FontWeight.w600)),
+        if (cur.retry) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: C.errorBg, borderRadius: BorderRadius.circular(8)),
+            child: Text('Làm lại', style: ts(12, w: FontWeight.w700, color: C.errorText)),
+          ),
+        ],
         const Spacer(),
         Text('Đúng $score · chuỗi $streak', style: ts(13, w: FontWeight.w600, color: C.muted)),
       ]),
+      const SizedBox(height: 8),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: LinearProgressIndicator(
+            value: (q + (answered ? 1 : 0)) / qs.length, minHeight: 6, backgroundColor: C.segmentBg, color: context.accent),
+      ),
       const SizedBox(height: 12),
       Box(
         padding: const EdgeInsets.all(20),
@@ -607,62 +899,132 @@ class _QuizTabState extends State<QuizTab> {
       else
         TextField(
           controller: input,
-          enabled: !answered,
+          focusNode: focus,
           autocorrect: false,
           enableSuggestions: false,
           textInputAction: TextInputAction.done,
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) {
+            // Đã chấm thì giữ nguyên chữ đã gõ, bàn phím vẫn mở để Enter sang câu.
+            if (answered && input.text != typed) {
+              input.value = TextEditingValue(text: typed, selection: TextSelection.collapsed(offset: typed.length));
+            }
+            setState(() {});
+          },
+          onEditingComplete: () {},
           onSubmitted: (_) {
-            if (!answered && canCheck) _check();
+            if (answered) {
+              _next();
+            } else if (input.text.trim().isNotEmpty) {
+              _check();
+            }
           },
           decoration: inputDeco('Gõ từ tiếng Anh'),
           style: ts(18, w: FontWeight.w600),
         ),
       if (answered) ...[
         const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: lastOk ? C.successBg : C.errorBg, borderRadius: BorderRadius.circular(14)),
-          child: Text(
-            lastOk
-                ? (near ? 'Gần đúng! Đáp án: ${c.word} — ${c.meaning}' : 'Chính xác! ${c.word} — ${c.meaning}')
-                : 'Chưa đúng — đáp án: ${c.word} (${c.meaning})',
-            style: ts(15, w: FontWeight.w600, color: lastOk ? C.successText : C.errorText),
-          ),
-        ),
+        _feedback(c),
       ],
       const SizedBox(height: 14),
-      BigButton(answered ? (q + 1 >= qs.length ? 'Xem kết quả' : 'Câu tiếp theo') : 'Kiểm tra',
-          answered ? _next : (canCheck ? _check : null),
-          color: context.accent),
+      if (answered)
+        BigButton(q + 1 >= qs.length ? 'Xem kết quả' : 'Câu tiếp theo', _next, color: context.accent)
+      else if (_choice)
+        BigButton('Không biết', () => _check(giveUp: true), outlined: true, textColor: C.muted)
+      else
+        Row(children: [
+          Expanded(flex: 2, child: BigButton('Gợi ý', _hint, outlined: true, textColor: C.ink)),
+          const SizedBox(width: 8),
+          Expanded(flex: 3, child: BigButton('Không biết', () => _check(giveUp: true), outlined: true, textColor: C.muted)),
+          const SizedBox(width: 8),
+          Expanded(flex: 4, child: BigButton('Kiểm tra', canCheck ? _check : null, color: context.accent)),
+        ]),
     ]);
   }
 
+  Widget _feedback(Card c) {
+    final fg = lastOk ? C.successText : C.errorText;
+    final title = !lastOk
+        ? 'Chưa đúng'
+        : near
+            ? 'Gần đúng — chú ý chính tả'
+            : hints > 0
+                ? 'Đúng (có dùng gợi ý)'
+                : 'Chính xác!';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(color: lastOk ? C.successBg : C.errorBg, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(lastOk ? Icons.check_circle_rounded : Icons.cancel_rounded, size: 20, color: fg),
+          const SizedBox(width: 8),
+          Expanded(child: Text(title, style: ts(15, w: FontWeight.w700, color: fg))),
+        ]),
+        if (!_choice && typed.trim().isNotEmpty && (!lastOk || near)) ...[
+          const SizedBox(height: 6),
+          Text.rich(TextSpan(children: [
+            TextSpan(text: 'Bạn gõ: ', style: ts(14, color: fg)),
+            for (final (ch, good) in alignTyped(typed, c.word))
+              TextSpan(
+                text: ch,
+                style: good
+                    ? ts(16, w: FontWeight.w600, color: fg)
+                    : ts(16, w: FontWeight.w700, color: C.sunday).copyWith(decoration: TextDecoration.underline),
+              ),
+          ])),
+        ],
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(
+            child: Text.rich(TextSpan(children: [
+              TextSpan(text: c.word, style: ts(17, w: FontWeight.w700, color: fg)),
+              if (c.ipa != null) TextSpan(text: '  ${c.ipa}', style: ts(14, color: fg)),
+              TextSpan(text: '  —  ${c.meaning}', style: ts(15, w: FontWeight.w600, color: fg)),
+            ])),
+          ),
+          Tap(
+            label: 'Nghe ${c.word}',
+            onTap: () => speakWord(c.word),
+            child: Padding(padding: const EdgeInsets.all(6), child: Icon(Icons.volume_up_rounded, size: 22, color: fg)),
+          ),
+        ]),
+        if (c.example != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, right: 6),
+            child: Text(c.example!, style: ts(13, color: fg, style: FontStyle.italic, h: 1.35)),
+          ),
+      ]),
+    );
+  }
+
   Widget _prompt(Card c) {
-    switch (mode!) {
+    switch (cur.m) {
       case QuizMode.viEn:
-        final hint = c.word.split('').asMap().entries.map((e) => e.key == 0 ? e.value : (e.value == ' ' ? '/' : '_')).join(' ');
         return Column(children: [
           Text('Nghĩa tiếng Việt', style: ts(12, color: C.muted)),
           const SizedBox(height: 6),
           Text(c.meaning, textAlign: TextAlign.center, style: ts(28, w: FontWeight.w700)),
           if (c.partOfSpeech != null) Text(c.partOfSpeech!, style: ts(14, color: C.muted, style: FontStyle.italic)),
           const SizedBox(height: 10),
-          Text(hint, style: ts(18, color: C.muted, ls: 1)),
+          Text(_pattern(c.word, 1 + hints), textAlign: TextAlign.center, style: ts(18, color: C.muted, ls: 1)),
         ]);
       case QuizMode.enVi:
         return Column(children: [
           if (c.partOfSpeech != null) Text(c.partOfSpeech!, style: ts(14, color: C.muted, style: FontStyle.italic)),
           Text(c.word, textAlign: TextAlign.center, style: ts(34, w: FontWeight.w700)),
           if (c.ipa != null) Text(c.ipa!, style: ts(16, color: C.muted)),
+          Tap(
+            label: 'Nghe ${c.word}',
+            onTap: () => speakWord(c.word),
+            child: Padding(padding: const EdgeInsets.all(6), child: Icon(Icons.volume_up_rounded, size: 24, color: context.accent)),
+          ),
         ]);
       case QuizMode.listenPick:
       case QuizMode.listenType:
         return Column(children: [
           Tap(
             label: 'Nghe',
-            onTap: () => _speak(c.word),
+            onTap: () => speakWord(c.word),
             child: Container(
               width: 72,
               height: 72,
@@ -672,16 +1034,19 @@ class _QuizTabState extends State<QuizTab> {
           ),
           const SizedBox(height: 10),
           Tap(
-            onTap: () => _speak(c.word, rate: 0.55),
+            onTap: () => speakWord(c.word, rate: 0.55),
             child: Padding(padding: const EdgeInsets.all(8), child: Text('Nghe chậm', style: ts(14, w: FontWeight.w600, color: context.accent))),
           ),
-          if (mode == QuizMode.listenType) Text('${c.word.length} chữ cái', style: ts(13, color: C.muted)),
+          if (cur.m == QuizMode.listenType) ...[
+            Text(_pattern(c.word, hints), textAlign: TextAlign.center, style: ts(18, color: C.muted, ls: 1)),
+            Text('${c.word.replaceAll(' ', '').length} chữ cái', style: ts(13, color: C.muted)),
+          ],
         ]);
     }
   }
 
   Widget _option(String o, Card c) {
-    final correct = mode == QuizMode.enVi ? c.meaning : c.word;
+    final correct = cur.m == QuizMode.enVi ? c.meaning : c.word;
     Color border = picked == o ? C.ink : C.borderInput;
     Color bg = C.surface;
     if (answered) {
@@ -696,7 +1061,12 @@ class _QuizTabState extends State<QuizTab> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Tap(
-        onTap: answered ? null : () => setState(() => picked = o),
+        onTap: answered
+            ? null
+            : () {
+                setState(() => picked = o);
+                _check();
+              },
         child: Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 52),
@@ -709,9 +1079,98 @@ class _QuizTabState extends State<QuizTab> {
     );
   }
 
+  Widget _result() {
+    final total = qs.where((x) => !x.retry).length;
+    final pct = total == 0 ? 0 : (score * 100 / total).round();
+    final msg = pct == 100
+        ? 'Xuất sắc, thuộc hết rồi!'
+        : pct >= 80
+            ? 'Rất tốt!'
+            : pct >= 50
+                ? 'Khá ổn, ôn thêm chút nữa'
+                : 'Cần ôn lại nhiều hơn';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Box(
+        padding: const EdgeInsets.all(24),
+        child: Column(children: [
+          Text('$score / $total', style: ts(44, w: FontWeight.w700)),
+          Text('đúng ngay lần đầu', style: ts(14, color: C.muted)),
+          const SizedBox(height: 6),
+          Text(msg, textAlign: TextAlign.center, style: ts(15, w: FontWeight.w600)),
+          if (bestStreak >= 3)
+            Padding(padding: const EdgeInsets.only(top: 4), child: Text('Chuỗi đúng dài nhất: $bestStreak', style: ts(13, color: C.muted))),
+        ]),
+      ),
+      if (missed.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text('TỪ CẦN ÔN THÊM · ${missed.length}', style: ts(12, w: FontWeight.w700, color: C.muted)),
+        const SizedBox(height: 8),
+        for (final c in missed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Box(
+              padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(c.word, style: ts(15, w: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(c.meaning, style: ts(14, color: C.muted)),
+                  ]),
+                ),
+                IconBtn(Icons.volume_up_rounded, 'Nghe ${c.word}', () => speakWord(c.word), bordered: false),
+              ]),
+            ),
+          ),
+        Text('Những từ này đã được đưa vào lượt Học hôm nay.', style: ts(12, color: C.muted)),
+        const SizedBox(height: 12),
+        BigButton('Ôn lại ${missed.length} từ sai', () => _start(m: mode, mix: mixed, only: [...missed]), color: context.accent),
+        const SizedBox(height: 10),
+        BigButton('Lượt mới', () => _start(m: mode, mix: mixed), outlined: true, textColor: C.ink),
+      ] else ...[
+        const SizedBox(height: 16),
+        BigButton('Lượt mới', () => _start(m: mode, mix: mixed), color: context.accent),
+      ],
+      const SizedBox(height: 10),
+      BigButton('Chọn trò khác', _quit, outlined: true, textColor: C.ink),
+    ]);
+  }
+
+  Widget _stat(String v, String label) => Expanded(
+        child: Column(children: [
+          Text(v, style: ts(22, w: FontWeight.w700)),
+          Text(label, style: ts(12, color: C.muted)),
+        ]),
+      );
+
   Widget _menu() {
+    final all = store.deckCards(widget.deckId);
+    final due = all.where((c) => !c.dueDate.isAfter(store.today)).length;
+    final weak = all.where(store.isWeak).length;
+    final avg = _avgMemory(all);
     final modes = QuizMode.values;
-    return Column(children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Box(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        child: Row(children: [
+          _stat('$due', 'đến hạn ôn'),
+          _stat('$weak', 'từ hay sai'),
+          _stat(avg == null ? '—' : '${(avg * 100).round()}%', 'độ nhớ TB'),
+        ]),
+      ),
+      const SizedBox(height: 14),
+      Text('ƯU TIÊN TỪ', style: ts(12, w: FontWeight.w700, color: C.muted)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (var i = 0; i < _sources.length; i++) Pill(_sources[i], selected: source == i, onTap: () => setState(() => source = i)),
+      ]),
+      const SizedBox(height: 12),
+      Text('SỐ CÂU', style: ts(12, w: FontWeight.w700, color: C.muted)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final n in _counts) Pill(n == 0 ? 'Tất cả' : '$n câu', selected: count == n, onTap: () => setState(() => count = n)),
+      ]),
+      const SizedBox(height: 16),
       for (var r = 0; r < 2; r++)
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -720,7 +1179,7 @@ class _QuizTabState extends State<QuizTab> {
               if (c > 0) const SizedBox(width: 12),
               Expanded(
                 child: Tap(
-                  onTap: () => _start(modes[r * 2 + c]),
+                  onTap: () => _start(m: modes[r * 2 + c]),
                   child: Box(
                     padding: const EdgeInsets.all(16),
                     radius: 20,
@@ -739,6 +1198,24 @@ class _QuizTabState extends State<QuizTab> {
             ],
           ]),
         ),
+      Tap(
+        onTap: () => _start(mix: true),
+        child: Box(
+          padding: const EdgeInsets.all(16),
+          radius: 20,
+          child: Row(children: [
+            Icon(Icons.shuffle_rounded, size: 26, color: context.accent),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Trộn tất cả', style: ts(15, w: FontWeight.w700)),
+                Text('Đổi kiểu câu hỏi liên tục — nhớ sâu hơn', style: ts(12, color: C.muted)),
+              ]),
+            ),
+            Icon(Icons.chevron_right_rounded, color: C.muted),
+          ]),
+        ),
+      ),
     ]);
   }
 }

@@ -23,6 +23,8 @@ class TodayScreen extends StatelessWidget {
         final events = store.eventsOn(t);
         return ScreenBody(top: 12, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const MenuBtn(),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('${greetingFor(now)}, ${store.settings.displayName}', style: ts(14, w: FontWeight.w500, color: C.muted)),
@@ -103,7 +105,7 @@ class TodayScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text('Hôm nay chưa có việc nào.', style: ts(14, color: C.muted)),
                   )
-                : Column(children: [for (final e in events) EventRow(e)]),
+                : Column(children: [for (final e in events) EventRow(e, on: t)]),
           ),
           const SizedBox(height: 24),
           Text('Đếm ngược', style: ts(18, w: FontWeight.w700)),

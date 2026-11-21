@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'logic.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'srs.dart';
 
 const subjectPalette = [0xFF2A78D6, 0xFFEB6834, 0xFF1BAF7A, 0xFFEDA100, 0xFFE87BA4, 0xFF7A4FD1, 0xFF0E9AA7, 0xFF8C6D3F];
 
@@ -21,6 +22,7 @@ class AppStore extends ChangeNotifier {
   List<StudySession> sessions = [];
   List<NotificationLog> notifLogs = [];
   List<Planned> planned = [];
+  List<Note> notes = [];
   bool loaded = false;
   SharedPreferences? _prefs;
   int _seq = 0;
@@ -58,6 +60,7 @@ class AppStore extends ChangeNotifier {
         'sessions': sessions.map((e) => e.toJson()).toList(),
         'notifLogs': notifLogs.map((e) => e.toJson()).toList(),
         'planned': planned.map((e) => e.toJson()).toList(),
+        'notes': notes.map((e) => e.toJson()).toList(),
       };
 
   List<T> _list<T>(dynamic v, T Function(Map<String, dynamic>) f) =>
@@ -74,6 +77,7 @@ class AppStore extends ChangeNotifier {
     sessions = _list(j['sessions'], StudySession.fromJson);
     notifLogs = _list(j['notifLogs'], NotificationLog.fromJson);
     planned = _list(j['planned'], Planned.fromJson);
+    notes = _list(j['notes'], Note.fromJson);
     if (decks.isEmpty) _seedDecks();
     if (subjects.isEmpty) _seedSubjects();
   }
@@ -196,9 +200,7 @@ class AppStore extends ChangeNotifier {
       repeating.add(Planned('morning', nextDaily(settings.morningTime), 'Tóm tắt buổi sáng',
           'Xem việc hôm nay và những ngày sắp tới', repeat: 'daily'));
     }
-    if (settings.studyReminder && cards.isNotEmpty) {
-      repeating.add(Planned('study', nextDaily('20:00'), 'Ôn từ vựng', 'Đến giờ ôn từ vựng rồi', repeat: 'daily'));
-    }
+    final study = settings.studyReminder ? _studyPlan(now, t) : <Planned>[];
 
     for (final sd in specialDays.where((s) => s.enabled)) {
       for (final off in sd.remindOffsetsDays) {
@@ -236,11 +238,33 @@ class AppStore extends ChangeNotifier {
       }
     }
     for (final e in events) {
+      final body =
+          '${e.start.hour.toString().padLeft(2, '0')}:${e.start.minute.toString().padLeft(2, '0')}${e.location != null && e.location!.isNotEmpty ? ' · ${e.location}' : ''}';
+      final title = 'Sắp tới: ${e.title}';
       for (final m in e.remindBeforeMin) {
-        final when = e.start.subtract(Duration(minutes: m));
-        if (when.isAfter(now)) {
-          once.add(Planned('ev_${e.id}_$m', when, 'Sắp tới: ${e.title}',
-              '${e.start.hour.toString().padLeft(2, '0')}:${e.start.minute.toString().padLeft(2, '0')}${e.location != null && e.location!.isNotEmpty ? ' · ${e.location}' : ''}'));
+        final key = 'ev_${e.id}_$m';
+        DateTime whenOn(DateTime d) =>
+            DateTime(d.year, d.month, d.day, e.start.hour, e.start.minute).subtract(Duration(minutes: m));
+        if (!e.repeats) {
+          final when = whenOn(e.start);
+          if (when.isAfter(now)) once.add(Planned(key, when, title, body));
+        } else if (_canRepeatEvent(e, t)) {
+          // iOS tự lặp nên vẫn nhắc dù lâu không mở app.
+          final from = addDays(t, -1); // nhắc trước có thể rơi vào hôm trước
+          for (final wd in e.repeat == 'daily' ? const [0] : _eventWeekdays(e)) {
+            for (final d in eventOccurrencesFrom(e, from, 15)) {
+              if ((wd == 0 || d.weekday == wd) && whenOn(d).isAfter(now)) {
+                repeating.add(Planned(wd == 0 ? '${key}_d' : '${key}_w$wd', whenOn(d), title, body,
+                    repeat: wd == 0 ? 'daily' : 'weekly'));
+                break;
+              }
+            }
+          }
+        } else {
+          for (final d in eventOccurrencesFrom(e, addDays(t, -1), 20)) {
+            final when = whenOn(d);
+            if (when.isAfter(now)) once.add(Planned('${key}_${isoDate(d)}', when, title, body));
+          }
         }
       }
     }
@@ -250,10 +274,46 @@ class AppStore extends ChangeNotifier {
     once.sort(byWhen);
     final keep = repeating.take(_maxRepeating).toList();
     final room = _maxPending - keep.length;
+    // 14 ngày ôn gần nhất luôn có chỗ; các lần xa hơn chỉ dùng phần còn thừa.
+    final studyFloor = math.min(study.length, math.min(_studyDailyDays, room));
+    final otherRoom = room - studyFloor;
+    final others = once.take(otherRoom).toList();
+    final studyKeep = study.take(room - others.length);
     final nextYear = addDays(t, 365);
     droppedReminders =
-        repeating.length - keep.length + once.skip(room).where((p) => p.when.isBefore(nextYear)).length;
-    return [...keep, ...once.take(room)]..sort(byWhen);
+        repeating.length - keep.length + once.skip(otherRoom).where((p) => p.when.isBefore(nextYear)).length;
+    return [...keep, ...others, ...studyKeep]..sort(byWhen);
+  }
+
+  /// Số ngày liên tiếp được nhắc ôn; sau đó thưa dần để tiết kiệm chỗ.
+  static const _studyDailyDays = 14;
+
+  /// iOS không cho đổi nội dung của lịch lặp, nên mỗi ngày đặt một nhắc riêng
+  /// kèm số từ đến hạn. Số này vẫn đúng nếu không mở app, vì hạn ôn chỉ đổi khi
+  /// mở app; khi mở app thì kế hoạch được tính lại. Ngày không có từ thì bỏ qua.
+  List<Planned> _studyPlan(DateTime now, DateTime t) {
+    final out = <Planned>[];
+    for (var i = 0; i < 60; i++) {
+      if (i >= _studyDailyDays && (i - _studyDailyDays) % 3 != 0) continue;
+      final d = addDays(t, i);
+      final when = atTime(d, settings.studyReminderTime);
+      if (!when.isAfter(now)) continue;
+      final n = cards.where((c) => !c.dueDate.isAfter(d)).length;
+      if (n == 0) continue;
+      out.add(Planned('study_${isoDate(d)}', when, 'Ôn từ vựng', 'Bạn có $n từ cần ôn hôm nay'));
+    }
+    return out;
+  }
+
+  List<int> _eventWeekdays(Event e) =>
+      e.repeatWeekdays.isEmpty ? [e.start.weekday] : e.repeatWeekdays;
+
+  /// Chỉ dùng lịch lặp của iOS khi chuỗi đã bắt đầu, không có ngày kết thúc và
+  /// không bỏ ngày nào sắp tới; nếu không thì iOS sẽ báo cả những ngày không có.
+  bool _canRepeatEvent(Event e, DateTime t) {
+    if (dateOnly(e.start).isAfter(t) || e.repeatUntil != null) return false;
+    final today = isoDate(t);
+    return !e.skipDates.any((s) => s.compareTo(today) >= 0);
   }
 
   bool _canRepeatWeekly(SpecialDay sd, DateTime t) {
@@ -271,6 +331,8 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> rescheduleNotifications() async {
+    _studyPlanStale = false;
+    _plannedOn = today;
     _flushDelivered();
     if (!settings.pushEnabled) {
       planned = [];
@@ -351,9 +413,16 @@ class AppStore extends ChangeNotifier {
 
   // ---------- sự kiện ----------
   List<Event> eventsOn(DateTime d) {
-    final l = events.where((e) => dateOnly(e.start) == dateOnly(d)).toList();
-    l.sort((a, b) => a.start.compareTo(b.start));
+    final l = events.where((e) => eventOccursOn(e, d)).toList();
+    int minutes(Event e) => e.start.hour * 60 + e.start.minute;
+    l.sort((a, b) => minutes(a).compareTo(minutes(b)));
     return l;
+  }
+
+  /// Xoá riêng một ngày khỏi chuỗi lặp, các ngày khác giữ nguyên.
+  void skipEventOn(Event e, DateTime d) {
+    e.skipDates = [...e.skipDates, isoDate(d)];
+    changed(reschedule: true);
   }
 
   void saveEvent(Event e) {
@@ -397,13 +466,27 @@ class AppStore extends ChangeNotifier {
         example: example?.trim().isEmpty ?? true ? null : example!.trim(),
         dueDate: today);
     cards.add(c);
+    _studyPlanStale = true;
     changed();
     return c;
   }
 
   void deleteCard(String id) {
     cards.removeWhere((c) => c.id == id);
+    _studyPlanStale = true;
     changed();
+  }
+
+  /// Ôn hoặc thêm thẻ làm lệch số từ trong nhắc ôn. Không đặt lại lịch sau mỗi
+  /// thẻ vì tốn nhiều lệnh gọi iOS; chờ khi rời màn hình hoặc thoát app.
+  bool _studyPlanStale = false;
+
+  /// Ngày lập kế hoạch gần nhất; sang ngày mới thì lập lại để kéo dài lịch nhắc.
+  DateTime? _plannedOn;
+  void flushStudyPlan() {
+    final newDay = _plannedOn != null && _plannedOn != today;
+    if (!_studyPlanStale && !newDay) return;
+    rescheduleNotifications();
   }
 
   Deck addDeck(String name) {
@@ -413,6 +496,27 @@ class AppStore extends ChangeNotifier {
     decks.add(d);
     changed();
     return d;
+  }
+
+  /// Đổi tên bộ; trả về false nếu tên trống hoặc trùng với bộ khác.
+  bool renameDeck(String id, String name) {
+    final n = name.trim();
+    if (n.isEmpty || decks.any((d) => d.id != id && d.name.toLowerCase() == n.toLowerCase())) return false;
+    final i = decks.indexWhere((d) => d.id == id);
+    if (i < 0) return false;
+    decks[i].name = n;
+    changed();
+    return true;
+  }
+
+  /// Xoá bộ cùng toàn bộ thẻ trong bộ. Luôn giữ lại ít nhất một bộ.
+  bool deleteDeck(String id) {
+    if (decks.length <= 1 || !decks.any((d) => d.id == id)) return false;
+    decks.removeWhere((d) => d.id == id);
+    cards.removeWhere((c) => c.deckId == id);
+    _studyPlanStale = true;
+    changed();
+    return true;
   }
 
   void _log(bool correct) {
@@ -426,28 +530,67 @@ class AppStore extends ChangeNotifier {
     }
   }
 
-  /// Lặp lại ngắt quãng (đường cong quên Ebbinghaus): nhớ đúng thì giãn dần
-  /// 1 → 3 → 7 → 14 → 30 → 60 → 120 → 240 ngày. Quên thì quay về bước đầu.
-  /// Ôn sớm hơn hạn (chưa đến ngày) không làm tăng bước — chỉ tính thống kê.
-  void review(Card c, bool known, {bool sameDay = false}) {
-    if (known) {
-      c.correctCount++;
-      final isDue = !c.dueDate.isAfter(today);
-      if (isDue) {
-        c.intervalDays = srsSchedule[math.min(c.stage, srsSchedule.length - 1)];
-        c.stage++;
-        c.ease = math.min(3.0, c.ease + 0.05);
-        c.dueDate = addDays(today, c.intervalDays);
-      }
-    } else {
+  /// Lặp lại ngắt quãng theo FSRS (xem srs.dart). [g]: 1 Quên · 2 Khó · 3 Nhớ · 4 Dễ.
+  /// Quên → từ quay lại ngay trong ngày; nhớ → hẹn lần tới lúc khả năng nhớ còn ~90%.
+  void grade(Card c, int g) {
+    final n = previewGrade(c, g);
+    c.stability = n.s;
+    c.difficulty = n.d;
+    c.intervalDays = n.days;
+    c.dueDate = addDays(today, n.days);
+    c.lastReview = today;
+    if (g == Fsrs.again) {
       c.wrongCount++;
+      if (c.correctCount > 0 || c.stage > 0) c.lapses++;
       c.stage = 0;
-      c.intervalDays = 1;
-      c.ease = math.max(1.3, c.ease - 0.2);
-      c.dueDate = sameDay ? today : addDays(today, 1);
+    } else {
+      c.correctCount++;
+      c.stage++;
     }
-    _log(known);
+    _log(g != Fsrs.again);
+    _studyPlanStale = true;
     changed();
+  }
+
+  /// Kết quả nếu chấm [g] cho [c] hôm nay (không thay đổi gì) — để hiện trước khoảng ôn.
+  ({double s, double d, int days}) previewGrade(Card c, int g) {
+    final elapsed = c.stability <= 0 || c.lastReview == null ? null : diffDays(today, c.lastReview!);
+    return Fsrs.next(c.stability, c.difficulty, elapsed, g);
+  }
+
+  void review(Card c, bool known) => grade(c, known ? Fsrs.good : Fsrs.again);
+
+  /// Khả năng nhớ lại [c] hôm nay (0–1). Từ chưa học = 0.
+  double memoryOf(Card c) => c.stability <= 0 || c.lastReview == null
+      ? 0
+      : Fsrs.retrievability(diffDays(today, c.lastReview!).toDouble(), c.stability);
+
+  bool isWeak(Card c) => c.wrongCount > 0 && (c.lapses > 0 || c.wrongCount >= c.correctCount || memoryOf(c) < 0.8);
+
+  /// Chọn từ cho một lượt dò. [source]: 0 thông minh · 1 hay sai · 2 mới thêm · 3 ngẫu nhiên.
+  /// "Thông minh" ưu tiên từ đến hạn, từ sắp quên (khả năng nhớ thấp) rồi từ hay sai.
+  List<Card> quizPick(String deckId, int source, int count, [math.Random? rnd]) {
+    final r = rnd ?? math.Random();
+    var l = deckCards(deckId);
+    switch (source) {
+      case 0:
+        double key(Card c) => (c.dueDate.isAfter(today) ? 1 : 0) + memoryOf(c) - math.min(c.wrongCount, 5) * 0.02;
+        l.shuffle(r);
+        l.sort((a, b) => key(a).compareTo(key(b)));
+      case 1:
+        l = l.where((c) => c.wrongCount > 0).toList()..shuffle(r);
+        l.sort((a, b) {
+          final x = (b.wrongCount - b.correctCount * 0.5).compareTo(a.wrongCount - a.correctCount * 0.5);
+          return x != 0 ? x : memoryOf(a).compareTo(memoryOf(b));
+        });
+      case 2:
+        l = l.reversed.toList();
+      default:
+        l.shuffle(r);
+    }
+    final picked = count <= 0 ? l : l.take(count).toList();
+    // Xen kẽ thứ tự để không đoán được đáp án theo vị trí.
+    return picked..shuffle(r);
   }
 
   // ---------- giờ học ----------
@@ -564,6 +707,49 @@ class AppStore extends ChangeNotifier {
       d = addDays(d, -1);
     }
     return n;
+  }
+
+  // ---------- ghi chú ----------
+  /// Mới nhất (theo ngày của ghi chú) lên trước; [query] lọc theo tiêu đề và nội dung,
+  /// [month] (nếu có) chỉ giữ ghi chú thuộc tháng đó.
+  List<Note> notesSorted([String query = '', DateTime? month]) {
+    final q = query.trim().toLowerCase();
+    final l = notes
+        .where((n) => month == null || (n.date.year == month.year && n.date.month == month.month))
+        .where((n) => q.isEmpty || n.title.toLowerCase().contains(q) || n.body.toLowerCase().contains(q))
+        .toList();
+    l.sort((a, b) => b.date.compareTo(a.date));
+    return l;
+  }
+
+  /// Số ghi chú theo từng tháng (1–12) của [year].
+  Map<int, int> noteCountsIn(int year) {
+    final m = <int, int>{};
+    for (final n in notes) {
+      if (n.date.year == year) m[n.date.month] = (m[n.date.month] ?? 0) + 1;
+    }
+    return m;
+  }
+
+  /// Ghi chú trống thì không lưu (và xoá nếu đã có).
+  void saveNote(Note n) {
+    final i = notes.indexWhere((x) => x.id == n.id);
+    if (n.isEmpty) {
+      if (i >= 0) notes.removeAt(i);
+    } else {
+      n.updatedAt = DateTime.now();
+      if (i >= 0) {
+        notes[i] = n;
+      } else {
+        notes.add(n);
+      }
+    }
+    changed();
+  }
+
+  void deleteNote(String id) {
+    notes.removeWhere((n) => n.id == id);
+    changed();
   }
 
   // ---------- sao lưu ----------

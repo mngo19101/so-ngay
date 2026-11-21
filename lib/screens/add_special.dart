@@ -183,7 +183,7 @@ class _AddSpecialScreenState extends State<AddSpecialScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(color: C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.borderInput)),
           child: Row(children: [
-            const Icon(Icons.schedule_rounded, size: 20, color: C.muted),
+            Icon(Icons.schedule_rounded, size: 20, color: C.muted),
             const SizedBox(width: 10),
             Text(notifyTime, style: ts(16)),
           ]),
@@ -224,7 +224,7 @@ class _AddSpecialScreenState extends State<AddSpecialScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(color: C.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.borderInput)),
           child: Row(children: [
-            const Icon(Icons.event_rounded, size: 20, color: C.muted),
+            Icon(Icons.event_rounded, size: 20, color: C.muted),
             const SizedBox(width: 10),
             Expanded(child: Text('${wdFull(solarDate)}, ${solarDate.day}/${solarDate.month}/${solarDate.year}', overflow: TextOverflow.ellipsis, style: ts(16))),
           ]),

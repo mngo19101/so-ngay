@@ -15,6 +15,10 @@ class Event {
   String? location;
   String category; // study | personal | habit | other
   List<int> remindBeforeMin;
+  String repeat; // none | daily | weekly
+  List<int> repeatWeekdays; // 1=T2..7=CN, chỉ dùng khi weekly
+  DateTime? repeatUntil; // ngày cuối của chuỗi (bao gồm), null = không kết thúc
+  List<String> skipDates; // các ngày đã xoá riêng lẻ khỏi chuỗi, dạng yyyy-MM-dd
   Event({
     required this.id,
     required this.title,
@@ -23,7 +27,12 @@ class Event {
     this.location,
     this.category = 'other',
     this.remindBeforeMin = const [],
+    this.repeat = 'none',
+    this.repeatWeekdays = const [],
+    this.repeatUntil,
+    this.skipDates = const [],
   });
+  bool get repeats => repeat != 'none';
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -32,6 +41,10 @@ class Event {
         'location': location,
         'category': category,
         'remindBeforeMin': remindBeforeMin,
+        'repeat': repeat,
+        'repeatWeekdays': repeatWeekdays,
+        'repeatUntil': repeatUntil == null ? null : isoDate(repeatUntil!),
+        'skipDates': skipDates,
       };
   factory Event.fromJson(Map<String, dynamic> j) => Event(
         id: j['id'],
@@ -41,6 +54,10 @@ class Event {
         location: j['location'],
         category: j['category'] ?? 'other',
         remindBeforeMin: (j['remindBeforeMin'] as List? ?? []).cast<int>(),
+        repeat: j['repeat'] ?? 'none',
+        repeatWeekdays: (j['repeatWeekdays'] as List? ?? []).cast<int>(),
+        repeatUntil: j['repeatUntil'] == null ? null : parseDate(j['repeatUntil']),
+        skipDates: (j['skipDates'] as List? ?? []).cast<String>(),
       );
 }
 
@@ -114,7 +131,7 @@ class Deck {
   factory Deck.fromJson(Map<String, dynamic> j) => Deck(j['id'], j['name']);
 }
 
-/// Khoảng cách (ngày) giữa các lần ôn theo đường cong quên.
+/// Lịch ôn cố định cũ — nay chỉ dùng để đọc dữ liệu cũ (xem srs.dart).
 const srsSchedule = [1, 3, 7, 14, 30, 60, 120, 240];
 
 class Card {
@@ -123,6 +140,11 @@ class Card {
   DateTime dueDate;
   int intervalDays, correctCount, wrongCount, stage;
   double ease;
+
+  /// FSRS: độ bền trí nhớ (ngày, 0 = chưa ôn lần nào), độ khó 1–10, ngày ôn gần nhất, số lần quên.
+  double stability, difficulty;
+  DateTime? lastReview;
+  int lapses;
   Card({
     required this.id,
     required this.deckId,
@@ -137,6 +159,10 @@ class Card {
     this.correctCount = 0,
     this.wrongCount = 0,
     this.stage = 0,
+    this.stability = 0,
+    this.difficulty = 0,
+    this.lastReview,
+    this.lapses = 0,
   });
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -152,8 +178,13 @@ class Card {
         'correctCount': correctCount,
         'wrongCount': wrongCount,
         'stage': stage,
+        'stability': stability,
+        'difficulty': difficulty,
+        'lastReview': lastReview == null ? null : isoDate(lastReview!),
+        'lapses': lapses,
       };
-  factory Card.fromJson(Map<String, dynamic> j) => Card(
+  factory Card.fromJson(Map<String, dynamic> j) {
+    final c = Card(
         id: j['id'],
         deckId: j['deckId'],
         word: j['word'],
@@ -167,7 +198,18 @@ class Card {
         correctCount: j['correctCount'] ?? 0,
         wrongCount: j['wrongCount'] ?? 0,
         stage: j['stage'] ?? srsSchedule.where((d) => d <= (j['intervalDays'] ?? 0)).length,
-      );
+        stability: (j['stability'] ?? 0).toDouble(),
+        difficulty: (j['difficulty'] ?? 0).toDouble(),
+        lastReview: j['lastReview'] == null ? null : parseDate(j['lastReview']),
+        lapses: j['lapses'] ?? 0);
+    // Dữ liệu từ lịch cũ (1→3→7… ngày): đổi sang FSRS, coi khoảng ôn hiện tại là độ bền.
+    if (!j.containsKey('stability') && c.intervalDays > 0) {
+      c.stability = c.intervalDays.toDouble();
+      c.difficulty = (11 - (c.ease - 1.3) / 1.7 * 6).clamp(1.0, 10.0);
+      c.lastReview = DateTime(c.dueDate.year, c.dueDate.month, c.dueDate.day - c.intervalDays);
+    }
+    return c;
+  }
 }
 
 class StudyLog {
@@ -213,6 +255,8 @@ class Settings {
   bool pushEnabled, sound, sidebarCollapsed, studyReminder;
   bool morningEnabled;
   String morningTime;
+  String studyReminderTime;
+  String themeMode; // system | light | dark
   int dailyGoalMin, weeklyGoalMin;
   Settings({
     this.displayName = 'bạn',
@@ -223,6 +267,8 @@ class Settings {
     this.studyReminder = true,
     this.morningEnabled = true,
     this.morningTime = '07:00',
+    this.studyReminderTime = '20:00',
+    this.themeMode = 'system',
     this.dailyGoalMin = 180,
     this.weeklyGoalMin = 1200,
   });
@@ -235,6 +281,8 @@ class Settings {
         'studyReminder': studyReminder,
         'morningEnabled': morningEnabled,
         'morningTime': morningTime,
+        'studyReminderTime': studyReminderTime,
+        'themeMode': themeMode,
         'dailyGoalMin': dailyGoalMin,
         'weeklyGoalMin': weeklyGoalMin,
       };
@@ -249,8 +297,32 @@ class Settings {
       studyReminder: j['studyReminder'] ?? d.studyReminder,
       morningEnabled: j['morningEnabled'] ?? d.morningEnabled,
       morningTime: j['morningTime'] ?? d.morningTime,
+      studyReminderTime: j['studyReminderTime'] ?? d.studyReminderTime,
+      themeMode: j['themeMode'] ?? d.themeMode,
       dailyGoalMin: j['dailyGoalMin'] ?? d.dailyGoalMin,
       weeklyGoalMin: j['weeklyGoalMin'] ?? d.weeklyGoalMin,
     );
   }
+}
+
+class Note {
+  String id, title, body;
+  DateTime date; // ngày giờ của ghi chú: tự điền lúc mở trang, sửa được
+  DateTime updatedAt;
+  Note({required this.id, this.title = '', this.body = '', required this.date, required this.updatedAt});
+  bool get isEmpty => title.trim().isEmpty && body.trim().isEmpty;
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'body': body,
+        'date': date.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+  factory Note.fromJson(Map<String, dynamic> j) => Note(
+        id: j['id'],
+        title: j['title'] ?? '',
+        body: j['body'] ?? '',
+        date: DateTime.parse(j['date']),
+        updatedAt: DateTime.parse(j['updatedAt'] ?? j['date']),
+      );
 }

@@ -261,7 +261,7 @@ class _StudyChartScreenState extends State<StudyChartScreen> {
                         width: math.min(30.0, 100),
                         height: math.max(2.0, bs[i].elapsed ? h * (math.max(0, bs[i].minutes) / scale) * 0.85 : 2),
                         decoration: BoxDecoration(
-                          color: bs[i].elapsed ? (i == si ? const Color(0xFF2F5BD3) : const Color(0xFF6F8DE0)) : C.segmentBg,
+                          color: bs[i].elapsed ? (i == si ? C.barSelected : C.bar) : C.segmentBg,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                         ),
                       ),
@@ -292,7 +292,7 @@ class _StudyChartScreenState extends State<StudyChartScreen> {
         width: 170,
         height: 170,
         child: CustomPaint(
-          painter: _RingPainter(frac, C.green, 14),
+          painter: _RingPainter(frac, C.green, C.segmentBg, 14),
           child: Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text('${goalTotal == 0 ? 0 : (total * 100 / goalTotal).round()}%', style: ts(32, w: FontWeight.w700)),
@@ -401,9 +401,9 @@ class _DashPainter extends CustomPainter {
 
 class _RingPainter extends CustomPainter {
   final double frac;
-  final Color color;
+  final Color color, track;
   final double width;
-  _RingPainter(this.frac, this.color, this.width);
+  _RingPainter(this.frac, this.color, this.track, this.width);
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -411,7 +411,7 @@ class _RingPainter extends CustomPainter {
     final bg = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = width
-      ..color = C.segmentBg;
+      ..color = track;
     final fg = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = width
@@ -422,5 +422,5 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter old) => old.frac != frac || old.color != color;
+  bool shouldRepaint(covariant _RingPainter old) => old.frac != frac || old.color != color || old.track != track;
 }

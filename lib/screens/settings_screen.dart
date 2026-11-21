@@ -27,7 +27,7 @@ class SettingsScreen extends StatelessWidget {
                 },
                 child: Row(children: [
                   Expanded(child: Text(s.displayName, style: ts(16, w: FontWeight.w600))),
-                  const Icon(Icons.edit_outlined, size: 20, color: C.muted),
+                  Icon(Icons.edit_outlined, size: 20, color: C.muted),
                 ]),
               ),
               const SizedBox(height: 18),
@@ -53,6 +53,15 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
               ]),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          Box(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Giao diện', style: ts(15, w: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Segmented(const ['Theo máy', 'Sáng', 'Tối'], const ['system', 'light', 'dark'].indexOf(s.themeMode),
+                  (i) => store.updateSettings((x) => x.themeMode = const ['system', 'light', 'dark'][i])),
             ]),
           ),
           const SizedBox(height: 14),
