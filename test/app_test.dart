@@ -394,4 +394,51 @@ void main() {
     final n = Note(id: 'x', title: 't', date: DateTime(2026, 1, 2, 3, 4), updatedAt: DateTime(2026));
     expect(Note.fromJson(n.toJson()).date, DateTime(2026, 1, 2, 3, 4));
   });
+
+  testWidgets('ghi chú: chia nhóm theo tháng, lọc theo tháng bằng bảng chọn', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await store.load();
+    store.notes
+      ..clear()
+      ..addAll([
+        Note(id: 'a', title: 'Học triết được cộng điểm', date: DateTime(2026, 11, 21, 15, 14), updatedAt: DateTime(2026)),
+        Note(id: 'b', title: 'Hôm nay thi triết', date: DateTime(2026, 11, 14, 10, 27), updatedAt: DateTime(2026)),
+        Note(id: 'c', title: 'Ôn chương 3', date: DateTime(2026, 10, 29, 20, 5), updatedAt: DateTime(2026)),
+        Note(id: 'd', title: 'Năm ngoái', date: DateTime(2025, 3, 1, 8, 0), updatedAt: DateTime(2026)),
+      ]);
+    expect(store.noteCountsIn(2026), {11: 2, 10: 1});
+    expect(store.notesSorted('', DateTime(2026, 10)).map((n) => n.id), ['c']);
+    nav.go(AppPage.notes);
+    await tester.pumpWidget(const SoNgayApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('THÁNG 11, 2026'), findsOneWidget);
+    expect(find.text('THÁNG 10, 2026'), findsOneWidget);
+    expect(find.text('THÁNG 3, 2025'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.calendar_month_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Xem ghi chú theo tháng'), findsOneWidget);
+    expect(find.text('2026'), findsOneWidget); // mở ở năm có ghi chú mới nhất
+    await tester.tap(find.text('T10'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Xem'));
+    await tester.pumpAndSettle();
+    expect(find.text('THÁNG 10, 2026 · 1 GHI CHÚ'), findsOneWidget);
+    expect(find.text('Ôn chương 3'), findsOneWidget);
+    expect(find.text('Hôm nay thi triết'), findsNothing);
+
+    // Tháng trống không bấm được.
+    await tester.tap(find.byIcon(Icons.calendar_month_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('T1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tất cả').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Hôm nay thi triết'), findsOneWidget);
+    expect(find.text('Năm ngoái'), findsOneWidget);
+  });
 }

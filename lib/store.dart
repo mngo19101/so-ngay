@@ -650,14 +650,25 @@ class AppStore extends ChangeNotifier {
   }
 
   // ---------- ghi chú ----------
-  /// Mới nhất (theo ngày của ghi chú) lên trước; [query] lọc theo tiêu đề và nội dung.
-  List<Note> notesSorted([String query = '']) {
+  /// Mới nhất (theo ngày của ghi chú) lên trước; [query] lọc theo tiêu đề và nội dung,
+  /// [month] (nếu có) chỉ giữ ghi chú thuộc tháng đó.
+  List<Note> notesSorted([String query = '', DateTime? month]) {
     final q = query.trim().toLowerCase();
     final l = notes
+        .where((n) => month == null || (n.date.year == month.year && n.date.month == month.month))
         .where((n) => q.isEmpty || n.title.toLowerCase().contains(q) || n.body.toLowerCase().contains(q))
         .toList();
     l.sort((a, b) => b.date.compareTo(a.date));
     return l;
+  }
+
+  /// Số ghi chú theo từng tháng (1–12) của [year].
+  Map<int, int> noteCountsIn(int year) {
+    final m = <int, int>{};
+    for (final n in notes) {
+      if (n.date.year == year) m[n.date.month] = (m[n.date.month] ?? 0) + 1;
+    }
+    return m;
   }
 
   /// Ghi chú trống thì không lưu (và xoá nếu đã có).
