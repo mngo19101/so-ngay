@@ -441,4 +441,52 @@ void main() {
     expect(find.text('Hôm nay thi triết'), findsOneWidget);
     expect(find.text('Năm ngoái'), findsOneWidget);
   });
+
+  testWidgets('quản lý bộ: đổi tên, xoá bộ kèm thẻ, giữ lại ít nhất một bộ', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await store.load();
+    store.decks
+      ..clear()
+      ..addAll([Deck('d1', 'IELTS'), Deck('d2', 'Thuật ngữ ML')]);
+    store.cards.clear();
+    store.addCard('d2', 'overfitting', 'quá khớp');
+    store.addCard('d2', 'epoch', 'vòng huấn luyện');
+    store.addCard('d1', 'abundant', 'dồi dào');
+    expect(store.renameDeck('d1', 'thuật ngữ ml'), isFalse); // trùng tên
+    nav.go(AppPage.cards);
+    await tester.pumpWidget(const SoNgayApp());
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Quản lý bộ'));
+    await tester.tap(find.text('Quản lý bộ'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 bộ'), findsOneWidget);
+    expect(find.text('2 từ'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Đổi tên bộ IELTS'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'IELTS 7.0');
+    await tester.tap(find.text('Lưu'));
+    await tester.pumpAndSettle();
+    expect(store.decks.first.name, 'IELTS 7.0');
+    expect(find.text('IELTS 7.0'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Xoá bộ Thuật ngữ ML'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 từ trong bộ cũng sẽ bị xoá. Không thể hoàn tác.'), findsOneWidget);
+    await tester.tap(find.text('Xoá'));
+    await tester.pumpAndSettle();
+    expect(store.decks.map((d) => d.id), ['d1']);
+    expect(store.cards.map((c) => c.word), ['abundant']);
+    expect(find.text('Cần giữ lại ít nhất một bộ.'), findsOneWidget);
+    expect(store.deleteDeck('d1'), isFalse);
+
+    await tester.tap(find.byIcon(Icons.chevron_left_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Thuật ngữ ML'), findsNothing);
+    expect(find.textContaining('Bộ IELTS 7.0'), findsOneWidget);
+  });
 }

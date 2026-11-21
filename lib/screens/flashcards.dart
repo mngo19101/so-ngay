@@ -41,6 +41,10 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 final n = await promptText(context, 'Tên bộ thẻ mới', hint: 'Ví dụ: TOEIC');
                 if (n != null && n.trim().isNotEmpty) setState(() => deckId = store.addDeck(n).id);
               }),
+              const SizedBox(width: 8),
+              Pill('Quản lý bộ',
+                  dashed: true,
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DeckManagerScreen()))),
             ]),
           ),
           const SizedBox(height: 14),
@@ -51,6 +55,100 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
           if (tab == 2) QuizTab(key: ValueKey('quiz$deckId'), deckId: deckId),
         ]);
       },
+    );
+  }
+}
+
+/// Danh sách mọi bộ thẻ: đổi tên, xoá (kèm thẻ trong bộ), thêm bộ mới.
+class DeckManagerScreen extends StatelessWidget {
+  const DeckManagerScreen({super.key});
+
+  Future<void> _rename(BuildContext context, Deck d) async {
+    final n = await promptText(context, 'Đổi tên bộ', initial: d.name);
+    if (n == null || !context.mounted || n.trim() == d.name) return;
+    if (n.trim().isEmpty) {
+      toast(context, 'Tên bộ không được để trống');
+    } else if (!store.renameDeck(d.id, n)) {
+      toast(context, 'Đã có bộ tên "${n.trim()}"');
+    }
+  }
+
+  Future<void> _delete(BuildContext context, Deck d) async {
+    final count = store.deckCards(d.id).length;
+    final ok = await confirm(
+      context,
+      'Xoá bộ "${d.name}"?',
+      count == 0 ? 'Bộ này chưa có từ nào.' : '$count từ trong bộ cũng sẽ bị xoá. Không thể hoàn tác.',
+    );
+    if (!ok || !context.mounted) return;
+    if (store.deleteDeck(d.id)) toast(context, 'Đã xoá bộ ${d.name}');
+  }
+
+  Widget _action(IconData icon, String label, VoidCallback? onTap, Color bg, Color fg) => Tap(
+        label: label,
+        onTap: onTap,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(color: onTap == null ? C.bg : bg, shape: BoxShape.circle),
+          child: Icon(icon, size: 20, color: onTap == null ? C.borderInput : fg),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListenableBuilder(
+          listenable: store,
+          builder: (context, _) {
+            final canDelete = store.decks.length > 1;
+            return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 40), children: [
+              Row(children: [
+                IconBtn(Icons.chevron_left_rounded, 'Quay lại', () => Navigator.pop(context)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Quản lý bộ', style: ts(22, w: FontWeight.w700, ls: -0.3)),
+                    Text('${store.decks.length} bộ', style: ts(13, color: C.muted)),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              for (final d in store.decks)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Box(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: ts(15, w: FontWeight.w700)),
+                          const SizedBox(height: 2),
+                          Text('${store.deckCards(d.id).length} từ', style: ts(12, color: C.muted)),
+                        ]),
+                      ),
+                      _action(Icons.edit_outlined, 'Đổi tên bộ ${d.name}', () => _rename(context, d), C.segmentBg, C.ink),
+                      const SizedBox(width: 8),
+                      _action(Icons.delete_outline_rounded, 'Xoá bộ ${d.name}', canDelete ? () => _delete(context, d) : null,
+                          C.errorBg, C.errorText),
+                    ]),
+                  ),
+                ),
+              if (!canDelete)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+                  child: Text('Cần giữ lại ít nhất một bộ.', style: ts(12, color: C.muted)),
+                ),
+              const SizedBox(height: 6),
+              BigButton('+ Bộ mới', () async {
+                final n = await promptText(context, 'Tên bộ thẻ mới', hint: 'Ví dụ: TOEIC');
+                if (n != null && n.trim().isNotEmpty) store.addDeck(n);
+              }, outlined: true, textColor: C.ink),
+            ]);
+          },
+        ),
+      ),
     );
   }
 }

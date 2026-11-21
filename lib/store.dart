@@ -497,6 +497,27 @@ class AppStore extends ChangeNotifier {
     return d;
   }
 
+  /// Đổi tên bộ; trả về false nếu tên trống hoặc trùng với bộ khác.
+  bool renameDeck(String id, String name) {
+    final n = name.trim();
+    if (n.isEmpty || decks.any((d) => d.id != id && d.name.toLowerCase() == n.toLowerCase())) return false;
+    final i = decks.indexWhere((d) => d.id == id);
+    if (i < 0) return false;
+    decks[i].name = n;
+    changed();
+    return true;
+  }
+
+  /// Xoá bộ cùng toàn bộ thẻ trong bộ. Luôn giữ lại ít nhất một bộ.
+  bool deleteDeck(String id) {
+    if (decks.length <= 1 || !decks.any((d) => d.id == id)) return false;
+    decks.removeWhere((d) => d.id == id);
+    cards.removeWhere((c) => c.deckId == id);
+    _studyPlanStale = true;
+    changed();
+    return true;
+  }
+
   void _log(bool correct) {
     final k = isoDate(today);
     final i = studyLogs.indexWhere((l) => l.date == k);
